@@ -2,7 +2,24 @@
 
 > 一款基于简谱的音乐猜歌游戏 —— 跟随简谱弹奏，猜出歌名！
 
-![游戏截图](https://img.shields.io/badge/Platform-Web-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![Songs](https://img.shields.io/badge/Songs-220%2B-orange)
+![游戏截图](https://img.shields.io/badge/Platform-Web-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![Songs](https://img.shields.io/badge/Songs-220%2B-orange) ![OpenSpec](https://img.shields.io/badge/Built%20with-OpenSpec-purple)
+
+---
+
+## 🧠 开发范式：Spec-Driven Development
+
+本游戏基于 **[OpenSpec](https://github.com/codemaker-ai/openspec)** 规范驱动开发范式构建。
+
+OpenSpec 是一种「先写规格，再写代码」的开发方法论：每一个功能改动都以结构化的 **变更工件（Change Artifacts）** 为驱动，确保设计决策、需求规格和实现任务在落地前就已完整记录。
+
+```
+📋 Proposal   →   需求意图与影响范围
+🎨 Design     →   技术方案与关键决策
+📐 Specs      →   行为规格（Given / When / Then）
+✅ Tasks      →   可执行的实现任务清单
+```
+
+本仓库的所有核心功能（调号识别修复、多八度键盘、旋律提取算法、移动端适配等）均经过完整的 Spec 流程设计后实现，变更记录保存在 `openspec/changes/` 目录下。
 
 ---
 
