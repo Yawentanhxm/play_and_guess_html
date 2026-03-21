@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>你弹我猜 - 音乐节奏猜谜游戏</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="stars" id="stars"></div>
+        
+        <header class="header">
+            <div class="score-display">
+                <span class="label">得分</span>
+                <span class="value" id="score">0</span>
+            </div>
+            <h1 class="title">你弹我猜</h1>
+            <div class="level-display">
+                <span class="label">关卡</span>
+                <span class="value" id="level">1</span>
+            </div>
+        </header>
+
+        <main class="game-area" id="gameArea">
+            <div class="start-screen" id="startScreen">
+                <h2 class="start-title">你弹我猜</h2>
+                <p class="start-desc">展示简谱，跟随指示弹奏，猜出歌名！</p>
+                <div class="instructions">
+                    <p>🎵 简谱显示区域会显示歌曲的简谱</p>
+                    <p>⌨️ 根据键盘指示按下对应按键</p>
+                    <p>🎯 弹奏完成后选择正确的歌名</p>
+                </div>
+                <button class="btn btn-primary" id="startBtn">开始游戏</button>
+            </div>
+
+            <div class="category-screen hidden" id="categoryScreen">
+                <h2 class="category-title">选择歌曲分类</h2>
+                <p class="category-desc">每个分类将随机抽取5道题目</p>
+                <div class="category-buttons">
+                    <button class="category-btn" data-category="儿歌">
+                        <span class="category-icon">🎵</span>
+                        <span class="category-name">儿歌</span>
+                    </button>
+                    <button class="category-btn" data-category="流行">
+                        <span class="category-icon">🎤</span>
+                        <span class="category-name">流行</span>
+                    </button>
+                    <button class="category-btn" data-category="民谣">
+                        <span class="category-icon">🎸</span>
+                        <span class="category-name">民谣</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="play-screen hidden" id="playScreen">
+                <div class="song-info">
+                    <span class="key-signature" id="keySignature"></span>
+                </div>
+                <div class="sheet-display" id="sheetDisplay">
+                </div>
+                <div class="keyboard-guide" id="keyboardGuide">
+                    <!-- 高八度排 Q-U，octave=1 -->
+                    <div class="keyboard-row octave-row-high">
+                        <span class="octave-label">高 ↑</span>
+                        <div class="key" data-note="1" data-octave="1"><span class="key-letter">Q</span><span class="key-note">1</span></div>
+                        <div class="key" data-note="2" data-octave="1"><span class="key-letter">W</span><span class="key-note">2</span></div>
+                        <div class="key" data-note="3" data-octave="1"><span class="key-letter">E</span><span class="key-note">3</span></div>
+                        <div class="key" data-note="4" data-octave="1"><span class="key-letter">R</span><span class="key-note">4</span></div>
+                        <div class="key" data-note="5" data-octave="1"><span class="key-letter">T</span><span class="key-note">5</span></div>
+                        <div class="key" data-note="6" data-octave="1"><span class="key-letter">Y</span><span class="key-note">6</span></div>
+                        <div class="key" data-note="7" data-octave="1"><span class="key-letter">U</span><span class="key-note">7</span></div>
+                    </div>
+                    <!-- 中八度排 A-J，octave=0 -->
+                    <div class="keyboard-row octave-row-mid">
+                        <span class="octave-label">中</span>
+                        <div class="key" data-note="1" data-octave="0"><span class="key-letter">A</span><span class="key-note">1</span></div>
+                        <div class="key" data-note="2" data-octave="0"><span class="key-letter">S</span><span class="key-note">2</span></div>
+                        <div class="key" data-note="3" data-octave="0"><span class="key-letter">D</span><span class="key-note">3</span></div>
+                        <div class="key" data-note="4" data-octave="0"><span class="key-letter">F</span><span class="key-note">4</span></div>
+                        <div class="key" data-note="5" data-octave="0"><span class="key-letter">G</span><span class="key-note">5</span></div>
+                        <div class="key" data-note="6" data-octave="0"><span class="key-letter">H</span><span class="key-note">6</span></div>
+                        <div class="key" data-note="7" data-octave="0"><span class="key-letter">J</span><span class="key-note">7</span></div>
+                    </div>
+                    <!-- 低八度排 Z-M，octave=-1 -->
+                    <div class="keyboard-row octave-row-low">
+                        <span class="octave-label">低 ↓</span>
+                        <div class="key" data-note="1" data-octave="-1"><span class="key-letter">Z</span><span class="key-note">1</span></div>
+                        <div class="key" data-note="2" data-octave="-1"><span class="key-letter">X</span><span class="key-note">2</span></div>
+                        <div class="key" data-note="3" data-octave="-1"><span class="key-letter">C</span><span class="key-note">3</span></div>
+                        <div class="key" data-note="4" data-octave="-1"><span class="key-letter">V</span><span class="key-note">4</span></div>
+                        <div class="key" data-note="5" data-octave="-1"><span class="key-letter">B</span><span class="key-note">5</span></div>
+                        <div class="key" data-note="6" data-octave="-1"><span class="key-letter">N</span><span class="key-note">6</span></div>
+                        <div class="key" data-note="7" data-octave="-1"><span class="key-letter">M</span><span class="key-note">7</span></div>
+                    </div>
+                </div>
+                <div class="play-tips" id="playTips">请跟随简谱弹奏...</div>
+            </div>
+
+            <div class="answer-screen hidden" id="answerScreen">
+                <div class="timer-circle" id="timerCircle">
+                    <svg viewBox="0 0 100 100">
+                        <circle class="timer-bg" cx="50" cy="50" r="45"/>
+                        <circle class="timer-progress" id="timerProgress" cx="50" cy="50" r="45"/>
+                    </svg>
+                    <span class="timer-text" id="timerText">15</span>
+                </div>
+                <p class="answer-prompt">请选择正确的歌名：</p>
+                <div class="options" id="options">
+                    <button class="option-btn" data-index="0">选项1</button>
+                    <button class="option-btn" data-index="1">选项2</button>
+                    <button class="option-btn" data-index="2">选项3</button>
+                </div>
+            </div>
+
+            <div class="result-overlay hidden" id="resultOverlay">
+                <div class="result-content" id="resultContent">
+                    <div class="result-icon" id="resultIcon">✓</div>
+                    <p class="result-text" id="resultText">正确!</p>
+                    <p class="result-song" id="resultSong">歌曲名</p>
+                </div>
+            </div>
+
+            <div class="end-screen hidden" id="endScreen">
+                <h2 class="end-title">游戏结束</h2>
+                <p class="final-score">最终得分</p>
+                <p class="score-value" id="finalScore">0</p>
+                <p class="score-text" id="scoreText">太棒了！</p>
+                <button class="btn btn-primary" id="restartBtn">再来一局</button>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/tonejs-midi.js"></script>
+    <script src="js/tonal.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/audio.js"></script>
+    <script src="js/game.js?v=9"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
