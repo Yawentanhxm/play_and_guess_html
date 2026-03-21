@@ -374,6 +374,7 @@ class Game {
 
         this.startBtn = document.getElementById('startBtn');
         this.restartBtn = document.getElementById('restartBtn');
+        this.skipBtn = document.getElementById('skipBtn');
         this.categoryButtons = document.querySelectorAll('.category-btn');
     }
 
@@ -383,6 +384,9 @@ class Game {
             this.startGame();
         });
         this.restartBtn.addEventListener('click', () => this.restartGame());
+        this.skipBtn.addEventListener('click', () => {
+            if (this.isPlaying && !this.isAnswering) this._skipToAnswer();
+        });
 
         this.categoryButtons.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -427,7 +431,8 @@ class Game {
         this.score = 0;
         this.updateDisplay();
         
-        this.loadMIDISongs().then(() => {
+        // 先加载目录索引，再解析 MIDI 文件
+        loadMidiIndex().then(() => this.loadMIDISongs()).then(() => {
             console.log('MIDI loading complete, showing category screen');
             this.showCategoryScreen();
         });
@@ -448,26 +453,14 @@ class Game {
                 console.log('Notes extracted:', notes.length);
                 
                 if (notes.length > 0) {
-                    console.log('=== 花海 MIDI音符分析 ===');
-                    console.log('调号:', keyName);
-                    const sample = notes.slice(0, 10).map(n => ({
-                        midi: n.midiNote,
-                        jianpu: n.note,
-                        duration: n.duration
-                    }));
-                    console.log(JSON.stringify(sample, null, 2));
-                    console.log('前30个简谱:', notes.slice(0, 30).map(n => n.note).join(','));
-                    console.log('====================');
-                    
                     SONGS.push({
                         id: Date.now() + Math.random(),
                         name: midiFile.name,
-                        category: category,
+                        category: midiFile.category || category,
                         tempo: midiData.bpm,
                         notes: notes,
                         keySignature: keySignature,
                         keyName: keyName,
-                        options: midiFile.options,
                         isMIDI: true
                     });
                 }
@@ -675,7 +668,61 @@ class Game {
         const keys = this.keyboardGuide.querySelectorAll('.key');
         keys.forEach(key => {
             key.classList.remove('active', 'pressed');
+
+            // 移动端触屏 + 桌面点击支持
+            // 用 _touchBound 标记避免重复绑定
+            if (!key._touchBound) {
+                key._touchBound = true;
+
+                const handleTap = (e) => {
+                    e.preventDefault(); // 阻止 touch 触发 click 的 300ms 延迟
+                    const note = parseInt(key.dataset.note);
+                    const octave = parseInt(key.dataset.octave);
+                    this._handleNoteInput(note, octave, key);
+                };
+
+                key.addEventListener('touchstart', handleTap, { passive: false });
+                key.addEventListener('click', handleTap);
+            }
         });
+    }
+
+    // 统一处理按键/触屏/点击输入
+    _handleNoteInput(pressedNote, pressedOctave, keyElement) {
+        if (!this.isPlaying || this.isAnswering || this.isProcessingNote) return;
+
+        const currentNote = this.currentSong.notes[this.currentNoteIndex];
+        const expectedNote = currentNote.note;
+        const expectedOctave = currentNote.octave ?? 0;
+
+        if (pressedNote === expectedNote && pressedOctave === expectedOctave) {
+            this.isProcessingNote = true;
+
+            const tempo = this.currentSong.tempo || 120;
+            const noteDurationSec = (60 / tempo) * currentNote.duration;
+
+            audioManager.playNoteByMidi(currentNote.midiNote, noteDurationSec);
+
+            if (keyElement) keyElement.classList.add('pressed');
+
+            const noteElement = this.sheetDisplay.querySelector(`[data-index="${this.currentNoteIndex}"]`);
+            if (noteElement) {
+                noteElement.classList.remove('active');
+                noteElement.classList.add('played');
+            }
+
+            setTimeout(() => {
+                if (keyElement) keyElement.classList.remove('pressed');
+            }, noteDurationSec * 1000);
+
+            this.playTips.textContent = '等待节奏...';
+            this.advanceToNextNoteWithDelay();
+        } else {
+            if (keyElement) {
+                keyElement.classList.add('pressed');
+                setTimeout(() => keyElement.classList.remove('pressed'), 150);
+            }
+        }
     }
 
     playNotes() {
@@ -692,15 +739,23 @@ class Game {
             this._skipToAnswer();
         }, PLAY_TIME_LIMIT);
 
-        // 倒计时提示更新
+        // 倒计时：常驻显示在 header
+        this.playTimerDisplay = document.getElementById('playTimerDisplay');
         let remaining = 30;
+        if (this.playTimerDisplay) this.playTimerDisplay.textContent = `${remaining}s`;
+
         this.playCountdown = setInterval(() => {
             remaining--;
             if (remaining <= 0 || !this.isPlaying || this.isAnswering) {
                 clearInterval(this.playCountdown);
+                if (this.playTimerDisplay) this.playTimerDisplay.textContent = '--';
                 return;
             }
-            this.playTips.textContent = `请按下对应按键... (${remaining}s)`;
+            if (this.playTimerDisplay) {
+                this.playTimerDisplay.textContent = `${remaining}s`;
+                // 最后10秒变红警示
+                this.playTimerDisplay.classList.toggle('timer-urgent', remaining <= 10);
+            }
         }, 1000);
 
         // Enter 键直接答题
@@ -718,7 +773,11 @@ class Game {
         this.isProcessingNote = false;
         const keys = this.keyboardGuide.querySelectorAll('.key');
         keys.forEach(key => key.classList.remove('active', 'pressed'));
-        document.removeEventListener('keydown', this._enterHandler);
+        if (this.playTimerDisplay) {
+            this.playTimerDisplay.textContent = '--';
+            this.playTimerDisplay.classList.remove('timer-urgent');
+        }
+        if (this._enterHandler) document.removeEventListener('keydown', this._enterHandler);
         this.startAnswerPhase();
     }
 
@@ -832,38 +891,7 @@ class Game {
         const keyElement = this.keyboardGuide.querySelector(
             `[data-note="${pressed.note}"][data-octave="${pressed.octave}"]`
         );
-
-        if (pressed.note === expectedNote && pressed.octave === expectedOctave) {
-            this.isProcessingNote = true;
-
-            // 音频时长 = 原曲时值（秒），与 advanceToNextNoteWithDelay 的等待时长严格一致
-            const tempo = this.currentSong.tempo || 120;
-            const noteDurationSec = (60 / tempo) * currentNote.duration;
-
-            // 音频按原曲时值播放；isProcessingNote=true 会锁住键盘直到这段时间结束
-            audioManager.playNoteByMidi(currentNote.midiNote, noteDurationSec);
-
-            if (keyElement) keyElement.classList.add('pressed');
-
-            const noteElement = this.sheetDisplay.querySelector(`[data-index="${this.currentNoteIndex}"]`);
-            if (noteElement) {
-                noteElement.classList.remove('active');
-                noteElement.classList.add('played');
-            }
-
-            // 按键高亮持续整个音符时值
-            setTimeout(() => {
-                if (keyElement) keyElement.classList.remove('pressed');
-            }, noteDurationSec * 1000);
-
-            this.playTips.textContent = '等待节奏...';
-            this.advanceToNextNoteWithDelay();
-        } else {
-            if (keyElement) {
-                keyElement.classList.add('pressed');
-                setTimeout(() => keyElement.classList.remove('pressed'), 150);
-            }
-        }
+        this._handleNoteInput(pressed.note, pressed.octave, keyElement);
     }
 
     advanceToNextNote() {
@@ -895,11 +923,20 @@ class Game {
 
     renderOptions() {
         const buttons = this.optionsContainer.querySelectorAll('.option-btn');
-        const shuffledOptions = this.shuffleArray([...this.currentSong.options]);
-        
+
+        // 从已加载歌曲中随机抽 2 个干扰项（不重复，不与正确答案相同）
+        const correctName = this.currentSong.name;
+        const otherNames = SONGS
+            .map(s => s.name)
+            .filter(n => n !== correctName);
+        const shuffledOthers = this.shuffleArray(otherNames);
+        const distractors = shuffledOthers.slice(0, 2);
+
+        const options = this.shuffleArray([correctName, ...distractors]);
+
         buttons.forEach((btn, index) => {
-            btn.textContent = shuffledOptions[index];
-            btn.dataset.answer = shuffledOptions[index];
+            btn.textContent = options[index];
+            btn.dataset.answer = options[index];
             btn.classList.remove('correct', 'wrong');
             btn.disabled = false;
         });

@@ -71,11 +71,33 @@ body {
     z-index: 10;
 }
 
-.score-display, .level-display {
+.score-display, .level-display, .timer-display {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--spacing-sm);
+    gap: 4px;
+}
+
+/* header 右侧：时间 + 关卡横排 */
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-lg);
+}
+
+.timer-value {
+    color: var(--color-accent);
+    transition: color 0.3s;
+}
+
+.timer-value.timer-urgent {
+    color: var(--color-error);
+    animation: pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
 }
 
 .label {
@@ -307,6 +329,35 @@ body {
 .bar-line--row-end {
     font-weight: 700;
     color: rgba(255,255,255,0.55);
+}
+
+/* 弹奏区底部：提示文字 + 直接答题按钮 */
+.play-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-sm);
+}
+
+.btn-skip {
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    border: 2px solid rgba(123, 44, 191, 0.6);
+    border-radius: 20px;
+    background: rgba(123, 44, 191, 0.15);
+    color: #c084fc;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.btn-skip:hover {
+    background: rgba(123, 44, 191, 0.35);
+    border-color: #c084fc;
+    color: #fff;
+    transform: translateY(-1px);
 }
 
 .note {
@@ -770,13 +821,43 @@ body {
     }
 
     .note {
-        font-size: 36px;
+        font-size: 22px;
     }
 
+    /* 移动端键盘：更大触摸区域 */
     .key {
-        width: 50px;
-        height: 50px;
-        font-size: 20px;
+        width: 40px;
+        height: 52px;
+        touch-action: manipulation;
+    }
+
+    .key-letter {
+        font-size: 13px;
+    }
+
+    .key-note {
+        font-size: 16px;
+        font-weight: 700;
+        opacity: 1;
+    }
+
+    .octave-label {
+        font-size: 10px;
+        width: 22px;
+    }
+
+    .keyboard-row {
+        gap: 4px;
+        padding: 4px 4px;
+    }
+
+    /* 移动端隐藏字母提示，只显示数字 */
+    .key-letter {
+        display: none;
+    }
+
+    .header-right {
+        gap: var(--spacing-md);
     }
 
     .option-btn {

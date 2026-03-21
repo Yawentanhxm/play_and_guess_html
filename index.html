@@ -19,9 +19,15 @@
                 <span class="value" id="score">0</span>
             </div>
             <h1 class="title">你弹我猜</h1>
-            <div class="level-display">
-                <span class="label">关卡</span>
-                <span class="value" id="level">1</span>
+            <div class="header-right">
+                <div class="timer-display" id="timerDisplay">
+                    <span class="label">时间</span>
+                    <span class="value timer-value" id="playTimerDisplay">--</span>
+                </div>
+                <div class="level-display">
+                    <span class="label">关卡</span>
+                    <span class="value" id="level">1</span>
+                </div>
             </div>
         </header>
 
@@ -97,7 +103,10 @@
                         <div class="key" data-note="7" data-octave="-1"><span class="key-letter">M</span><span class="key-note">7</span></div>
                     </div>
                 </div>
-                <div class="play-tips" id="playTips">请跟随简谱弹奏...</div>
+                <div class="play-bottom">
+                    <div class="play-tips" id="playTips">请跟随简谱弹奏...</div>
+                    <button class="btn btn-skip" id="skipBtn">我猜到了 →</button>
+                </div>
             </div>
 
             <div class="answer-screen hidden" id="answerScreen">
@@ -138,7 +147,7 @@
     <script src="js/tonal.js"></script>
     <script src="js/data.js"></script>
     <script src="js/audio.js"></script>
-    <script src="js/game.js?v=10"></script>
+    <script src="js/game.js?v=13"></script>
     <script src="js/main.js"></script>
 </body>
 </html>
