@@ -23,6 +23,43 @@ class AudioManager {
         }
     }
 
+    // 自由模式：开始持续发声（直到 stopNote 被调用）
+    startNote(midiNote) {
+        if (!this.isSupported || !this.audioContext) return;
+        if (!midiNote) return;
+        this.ensureContext();
+        this.stopNote(midiNote); // 防止重复
+        const frequency = 440 * Math.pow(2, (midiNote - 69) / 12);
+        const now = this.audioContext.currentTime;
+
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(frequency, now);
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01); // 10ms 渐入防爆音
+
+        oscillator.start(now);
+
+        if (!this._activeNodes) this._activeNodes = {};
+        this._activeNodes[midiNote] = { oscillator, gainNode };
+    }
+
+    // 自由模式：松键，渐出后停止
+    stopNote(midiNote) {
+        if (!this._activeNodes || !this._activeNodes[midiNote]) return;
+        const { oscillator, gainNode } = this._activeNodes[midiNote];
+        const now = this.audioContext.currentTime;
+        gainNode.gain.cancelScheduledValues(now);
+        gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+        gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.08); // 80ms 渐出
+        oscillator.stop(now + 0.08);
+        delete this._activeNodes[midiNote];
+    }
+
     playNote(noteNumber, duration = 0.3) {
         if (!this.isSupported || !this.audioContext) return;
         this.ensureContext();

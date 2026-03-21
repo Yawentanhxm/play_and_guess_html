@@ -191,7 +191,88 @@ body {
 .category-desc {
     font-size: 16px;
     color: var(--color-text-muted);
+    margin-bottom: var(--spacing-md);
+}
+
+/* 自由模式开关 */
+.mode-toggle {
+    display: flex;
+    justify-content: center;
     margin-bottom: var(--spacing-xl);
+}
+.mode-label {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    padding: 12px 20px;
+    border-radius: 12px;
+    border: 1px solid rgba(192, 132, 252, 0.2);
+    background: rgba(123, 44, 191, 0.08);
+    transition: background 0.2s, border-color 0.2s;
+}
+.mode-label:has(input:checked) {
+    border-color: rgba(192, 132, 252, 0.5);
+    background: rgba(123, 44, 191, 0.18);
+}
+.mode-label input[type="checkbox"] {
+    display: none;
+}
+/* 滑块 */
+.mode-slider {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 12px;
+    flex-shrink: 0;
+    transition: background 0.25s;
+}
+.mode-slider::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.25s;
+}
+.mode-label:has(input:checked) .mode-slider {
+    background: #c084fc;
+}
+.mode-label:has(input:checked) .mode-slider::after {
+    transform: translateX(20px);
+}
+.mode-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.mode-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-text);
+}
+.mode-desc {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+/* 自由模式提示徽章（弹奏页面） */
+.mode-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: rgba(192, 132, 252, 0.2);
+    border: 1px solid rgba(192, 132, 252, 0.4);
+    color: #c084fc;
+    letter-spacing: 0.5px;
+    margin-left: 8px;
+    vertical-align: middle;
 }
 
 .category-buttons {
@@ -271,8 +352,68 @@ body {
 }
 
 .song-info {
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
     margin-bottom: var(--spacing-md);
+    flex-wrap: wrap;
+}
+
+/* 弹奏页内联小开关 */
+.mode-toggle-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(192, 132, 252, 0.25);
+    background: rgba(123, 44, 191, 0.08);
+    transition: background 0.2s, border-color 0.2s;
+    user-select: none;
+}
+.mode-toggle-inline:has(input:checked) {
+    border-color: rgba(192, 132, 252, 0.55);
+    background: rgba(123, 44, 191, 0.22);
+}
+.mode-toggle-inline input[type="checkbox"] {
+    display: none;
+}
+.mode-slider-sm {
+    position: relative;
+    width: 32px;
+    height: 18px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 9px;
+    flex-shrink: 0;
+    transition: background 0.25s;
+}
+.mode-slider-sm::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.25s;
+}
+.mode-toggle-inline:has(input:checked) .mode-slider-sm {
+    background: #c084fc;
+}
+.mode-toggle-inline:has(input:checked) .mode-slider-sm::after {
+    transform: translateX(14px);
+}
+.mode-toggle-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    transition: color 0.2s;
+}
+.mode-toggle-inline:has(input:checked) .mode-toggle-label {
+    color: #c084fc;
 }
 
 .key-signature {
@@ -499,6 +640,148 @@ body {
     font-size: 12px;
     font-weight: 500;
     opacity: 0.7;
+}
+
+/* key-next 样式已移除，键盘上不显示下一键高亮 */
+
+/* 简谱下一音符：淡蓝底色 */
+.note.note-next {
+    background: rgba(96, 165, 250, 0.18);
+    border-radius: 4px;
+}
+
+/* 预告栏 */
+.preview-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-lg);
+    padding: 8px 16px;
+    margin: 4px 0;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    min-height: 44px;
+    font-family: var(--font-mono);
+}
+
+.preview-bar:empty {
+    display: none;
+}
+
+.preview-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.preview-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    opacity: 0.6;
+    text-transform: uppercase;
+}
+
+.preview-key {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.preview-key.current {
+    background: rgba(123, 44, 191, 0.45);
+    border: 3px solid #c084fc;
+    color: #fff;
+    font-size: 16px;
+    box-shadow: 0 0 14px rgba(192, 132, 252, 0.7);
+    animation: pulse-key 0.8s ease-in-out infinite;
+    width: 52px;
+    height: 52px;
+}
+
+.preview-key.next {
+    background: rgba(96, 165, 250, 0.15);
+    border: 2px dashed #60a5fa;
+    color: #93c5fd;
+    opacity: 0.7;
+    width: 38px;
+    height: 38px;
+    font-size: 11px;
+}
+
+.preview-arrow {
+    font-size: 20px;
+    opacity: 0.4;
+    color: var(--color-text-muted);
+}
+
+.preview-key-letter {
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.preview-key-note {
+    font-size: 10px;
+    opacity: 0.8;
+    line-height: 1;
+}
+
+@keyframes pulse-key {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(192, 132, 252, 0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(192, 132, 252, 0); }
+}
+
+/* 加载遮罩 */
+.loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(10, 5, 30, 0.82);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: all;
+}
+.loading-overlay.hidden {
+    display: none;
+}
+.loading-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 40px 48px;
+    background: rgba(30, 15, 60, 0.9);
+    border: 1px solid rgba(192, 132, 252, 0.3);
+    border-radius: 20px;
+    box-shadow: 0 0 40px rgba(123, 44, 191, 0.4);
+}
+.loading-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid rgba(192, 132, 252, 0.2);
+    border-top-color: #c084fc;
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+}
+.loading-text {
+    color: #e2d9f3;
+    font-size: 15px;
+    font-family: var(--font-sans);
+    letter-spacing: 1px;
+    margin: 0;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
 /* 任务4.2：简谱高八度 — 数字上方加点 */

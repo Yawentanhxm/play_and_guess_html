@@ -1,3 +1,6 @@
+// 宽容判定系数：键盘解锁时间 = 原曲时值 × TIMING_TOLERANCE，音频播放时长不变
+const TIMING_TOLERANCE = 0.75;
+
 const KEY_SIGNATURES = {
     'C':  { name: 'C大调', scale: [0, 2, 4, 5, 7, 9, 11], root: 0 },
     'G':  { name: 'G大调', scale: [0, 2, 4, 6, 7, 9, 11], root: 7 },
@@ -189,6 +192,28 @@ function detectKeyByNoteDistribution(midiData) {
     return bestKey;
 }
 
+// 任务2.1：从简谱数字+八度+调号反算 MIDI 音高（midiToJianpu 的逆运算）
+function noteToMidi(note, octave, keySignature) {
+    const key = KEY_SIGNATURES[keySignature] || KEY_SIGNATURES['C'];
+    const scale = key.scale;
+    const rootIndex = scale.indexOf(key.root);
+    const orderedScale = rootIndex <= 0
+        ? scale
+        : [...scale.slice(rootIndex), ...scale.slice(0, rootIndex)];
+
+    // note 是 1-7，对应 orderedScale[0-6]
+    const pitchClass = orderedScale[(note - 1) % 7];
+
+    // 以根音定中八度基准
+    let middleRoot = key.root;
+    while (middleRoot < 60) middleRoot += 12;
+    while (middleRoot >= 72) middleRoot -= 12;
+
+    // 基础 MIDI = 中八度根音 + 音程
+    let midi = middleRoot + ((pitchClass - key.root + 12) % 12) + octave * 12;
+    return midi;
+}
+
 function midiToJianpu(midiNote, keySignature) {
     const key = KEY_SIGNATURES[keySignature] || KEY_SIGNATURES['C'];
     const noteInOctave = midiNote % 12;
@@ -375,7 +400,11 @@ class Game {
         this.startBtn = document.getElementById('startBtn');
         this.restartBtn = document.getElementById('restartBtn');
         this.skipBtn = document.getElementById('skipBtn');
+        this.previewBar = document.getElementById('previewBar');
         this.categoryButtons = document.querySelectorAll('.category-btn');
+        this.freeModeToggle = document.getElementById('freeModeToggle');
+        this.freeModeTogglePlay = document.getElementById('freeModeTogglePlay');
+        this.freeMode = false;
     }
 
     initEventListeners() {
@@ -396,6 +425,20 @@ class Game {
         });
 
         document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+        document.addEventListener('keyup',   (e) => this.handleKeyRelease(e));
+
+        // 分类页开关
+        if (this.freeModeToggle) {
+            this.freeModeToggle.addEventListener('change', () => {
+                this._setFreeMode(this.freeModeToggle.checked);
+            });
+        }
+        // 弹奏页开关（实时切换）
+        if (this.freeModeTogglePlay) {
+            this.freeModeTogglePlay.addEventListener('change', () => {
+                this._setFreeMode(this.freeModeTogglePlay.checked);
+            });
+        }
 
         this.optionsContainer.addEventListener('click', (e) => {
             if (e.target.classList.contains('option-btn')) {
@@ -426,28 +469,80 @@ class Game {
         }
     }
 
+    _setFreeMode(enabled) {
+        this.freeMode = enabled;
+        // 两个开关保持同步
+        if (this.freeModeToggle) this.freeModeToggle.checked = enabled;
+        if (this.freeModeTogglePlay) this.freeModeTogglePlay.checked = enabled;
+        // 若正在弹奏，刷新调号区徽章显示，并停止任何持续音
+        if (this.isPlaying && !this.isAnswering) {
+            if (!enabled && this._freeModeActiveNote != null) {
+                audioManager.stopNote(this._freeModeActiveNote);
+                this._freeModeActiveNote = null;
+                if (this._freeModeKeyEl) {
+                    this._freeModeKeyEl.classList.remove('pressed');
+                    this._freeModeKeyEl = null;
+                }
+                this.isProcessingNote = false;
+            }
+            // 更新徽章
+            const badge = this.freeMode
+                ? ' <span class="mode-badge">自由模式</span>' : '';
+            const base = this.currentSong?.keyName
+                ? `调号: ${this.currentSong.keyName}` : '';
+            this.keySignatureDisplay.innerHTML = base + badge;
+        }
+        // 更新弹奏提示
+        if (this.isPlaying && !this.isAnswering) {
+            this.playTips.textContent = enabled
+                ? '自由模式：按住发声，松开推进'
+                : '请按下对应按键...';
+        }
+    }
+
+    showLoadingOverlay(text = '加载音乐中...') {
+        const overlay = document.getElementById('loadingOverlay');
+        const textEl = document.getElementById('loadingText');
+        if (textEl) textEl.textContent = text;
+        if (overlay) overlay.classList.remove('hidden');
+    }
+
+    hideLoadingOverlay() {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) overlay.classList.add('hidden');
+    }
+
     startGame() {
         this.currentLevel = 1;
         this.score = 0;
         this.updateDisplay();
-        
+
+        this.showLoadingOverlay('加载音乐中...');
         // 先加载目录索引，再解析 MIDI 文件
         loadMidiIndex().then(() => this.loadMIDISongs()).then(() => {
+            this.hideLoadingOverlay();
             console.log('MIDI loading complete, showing category screen');
             this.showCategoryScreen();
+        }).catch(err => {
+            this.hideLoadingOverlay();
+            console.error('加载失败:', err);
         });
     }
 
     async loadMIDISongs() {
         console.log('Starting to load MIDI files...');
-        
+        const total = MIDI_FILES.length;
+        let loaded = 0;
+
         for (const midiFile of MIDI_FILES) {
             try {
+                loaded++;
+                this.showLoadingOverlay(`加载音乐中... (${loaded}/${total})`);
                 console.log('Loading:', `data/${midiFile.file}`);
                 const pathParts = midiFile.file.split('/');
                 const category = pathParts[0];
                 console.log('Category:', category);
-                
+
                 const midiData = await Midi.fromUrl(`data/${midiFile.file}`);
                 const { notes, keySignature, keyName } = extractNotesFromMidi(midiData);
                 console.log('Notes extracted:', notes.length);
@@ -506,9 +601,11 @@ class Game {
         this.updateDisplay();
         
         if (this.currentSong.keyName) {
-            this.keySignatureDisplay.textContent = `调号: ${this.currentSong.keyName}`;
+            this.keySignatureDisplay.innerHTML = `调号: ${this.currentSong.keyName}` +
+                (this.freeMode ? ' <span class="mode-badge">自由模式</span>' : '');
         } else {
-            this.keySignatureDisplay.textContent = '';
+            this.keySignatureDisplay.innerHTML = this.freeMode
+                ? '<span class="mode-badge">自由模式</span>' : '';
         }
 
         this.showScreen('play');
@@ -535,6 +632,10 @@ class Game {
                 break;
             case 'play':
                 this.playScreen.classList.remove('hidden');
+                // 同步弹奏页开关状态
+                if (this.freeModeTogglePlay) {
+                    this.freeModeTogglePlay.checked = this.freeMode;
+                }
                 break;
             case 'answer':
                 this.answerScreen.classList.remove('hidden');
@@ -683,10 +784,67 @@ class Game {
                     this._handleNoteInput(note, octave, key);
                 };
 
+                const handleRelease = (e) => {
+                    e.preventDefault();
+                    this._handleNoteRelease(key);
+                };
+
                 key.addEventListener('touchstart', handleTap, { passive: false });
+                key.addEventListener('touchend',   handleRelease, { passive: false });
+                key.addEventListener('touchcancel', handleRelease, { passive: false });
                 key.addEventListener('click', handleTap);
             }
         });
+    }
+
+    // 任务3.1~3.3：预告栏渲染
+    renderPreviewBar(currentIndex) {
+        if (!this.previewBar) return;
+        const notes = this.currentSong?.notes;
+        if (!notes) { this.previewBar.innerHTML = ''; return; }
+
+        // 键名映射表（八度 → 该八度的7个键名）
+        const KEY_NAMES = {
+            1:  ['Q','W','E','R','T','Y','U'],
+            0:  ['A','S','D','F','G','H','J'],
+            '-1':['Z','X','C','V','B','N','M'],
+        };
+
+        const getKeyName = (note, octave) => {
+            const row = KEY_NAMES[octave] || KEY_NAMES[0];
+            return row[note - 1] || '?';
+        };
+
+        const getOctaveMark = (octave) =>
+            octave === 1 ? '↑' : octave === -1 ? '↓' : '';
+
+        const makeItem = (noteData, cls, label) => {
+            if (!noteData) {
+                return `<div class="preview-item">
+                    <span class="preview-label">${label}</span>
+                    <div class="preview-key ${cls}">
+                        <span class="preview-key-letter">--</span>
+                    </div>
+                </div>`;
+            }
+            const keyName = getKeyName(noteData.note, noteData.octave ?? 0);
+            const mark = getOctaveMark(noteData.octave ?? 0);
+            return `<div class="preview-item">
+                <span class="preview-label">${label}</span>
+                <div class="preview-key ${cls}">
+                    <span class="preview-key-letter">${keyName}</span>
+                    <span class="preview-key-note">${noteData.note}${mark}</span>
+                </div>
+            </div>`;
+        };
+
+        const cur = notes[currentIndex] || null;
+        const nxt = notes[currentIndex + 1] || null;
+
+        this.previewBar.innerHTML =
+            makeItem(cur, 'current', 'NOW') +
+            `<span class="preview-arrow">→</span>` +
+            makeItem(nxt, 'next', 'NEXT');
     }
 
     // 统一处理按键/触屏/点击输入
@@ -703,7 +861,15 @@ class Game {
             const tempo = this.currentSong.tempo || 120;
             const noteDurationSec = (60 / tempo) * currentNote.duration;
 
-            audioManager.playNoteByMidi(currentNote.midiNote, noteDurationSec);
+            if (this.freeMode) {
+                // 自由模式：开始持续发声（不限时长），记录音符以便 keyup 时停止
+                audioManager.startNote(currentNote.midiNote);
+                this._freeModeActiveNote = currentNote.midiNote;
+                this._freeModeKeyEl = keyElement;
+            } else {
+                // 正常模式：按原曲时值发声
+                audioManager.playNoteByMidi(currentNote.midiNote, noteDurationSec);
+            }
 
             if (keyElement) keyElement.classList.add('pressed');
 
@@ -713,13 +879,23 @@ class Game {
                 noteElement.classList.add('played');
             }
 
-            setTimeout(() => {
-                if (keyElement) keyElement.classList.remove('pressed');
-            }, noteDurationSec * 1000);
-
-            this.playTips.textContent = '等待节奏...';
-            this.advanceToNextNoteWithDelay();
+            if (this.freeMode) {
+                // 自由模式：立即推进到下一音符，不等时值
+                this.playTips.textContent = '松开后继续...';
+                // 推进逻辑在 keyup/touchend 时触发（见 _handleNoteRelease）
+            } else {
+                setTimeout(() => {
+                    if (keyElement) keyElement.classList.remove('pressed');
+                }, noteDurationSec * 1000);
+                this.playTips.textContent = '等待节奏...';
+                this.advanceToNextNoteWithDelay();
+            }
         } else {
+            // 按错：只有自由模式下才发出错音反馈，普通模式静默
+            if (this.freeMode) {
+                const pressedMidi = noteToMidi(pressedNote, pressedOctave, this.currentSong.keySignature);
+                audioManager.playNoteByMidi(pressedMidi, 0.15);
+            }
             if (keyElement) {
                 keyElement.classList.add('pressed');
                 setTimeout(() => keyElement.classList.remove('pressed'), 150);
@@ -727,11 +903,32 @@ class Game {
         }
     }
 
+    // 自由模式：松键时停止发声并推进
+    _handleNoteRelease(keyElement) {
+        if (!this.freeMode || !this.isPlaying || this.isAnswering) return;
+        if (this._freeModeActiveNote == null) return;
+
+        audioManager.stopNote(this._freeModeActiveNote);
+        this._freeModeActiveNote = null;
+
+        if (this._freeModeKeyEl) {
+            this._freeModeKeyEl.classList.remove('pressed');
+            this._freeModeKeyEl = null;
+        }
+        if (keyElement) keyElement.classList.remove('pressed');
+
+        this.advanceToNextNote();
+        this.isProcessingNote = false;
+    }
+
     playNotes() {
         this.playTips.textContent = '请按下对应按键...';
         this.highlightNote(0);
         const firstNote = this.currentSong.notes[0];
-        this.highlightKey(firstNote.note, firstNote.octave ?? 0);
+        const secondNote = this.currentSong.notes[1] || null;
+        this.highlightKey(firstNote.note, firstNote.octave ?? 0,
+            secondNote?.note ?? null, secondNote?.octave ?? null);
+        this.renderPreviewBar(0);
 
         // 30秒弹奏时限：时间到强制进入答题
         const PLAY_TIME_LIMIT = 30000;
@@ -784,12 +981,12 @@ class Game {
     }
 
     advanceToNextNoteWithDelay() {
-        // 播放时长由原曲 tempo + 音符时值决定，与用户输入速度无关
-        // isProcessingNote = true 在整个等待期间锁住输入，用户无法提前按下一个键
         const tempo = this.currentSong.tempo || 120;
         const currentNoteDuration = this.currentSong.notes[this.currentNoteIndex].duration;
-        const beatDuration = 60000 / tempo;           // 一拍多少 ms
-        const duration = beatDuration * currentNoteDuration; // 本音符时值 ms
+        const beatDuration = 60000 / tempo;
+        const duration = beatDuration * currentNoteDuration; // 完整时值 ms（音频用）
+        // 键盘解锁时间 = 完整时值 × 宽容系数，玩家不需要等满整拍才能按下一个键
+        const unlockDelay = duration * TIMING_TOLERANCE;
 
         setTimeout(() => {
             if (!this.isPlaying) {
@@ -814,38 +1011,45 @@ class Game {
 
             this.highlightNote(this.currentNoteIndex);
             const n = this.currentSong.notes[this.currentNoteIndex];
-            this.highlightKey(n.note, n.octave ?? 0);
+            const nxt = this.currentSong.notes[this.currentNoteIndex + 1] || null;
+            this.highlightKey(n.note, n.octave ?? 0,
+                nxt?.note ?? null, nxt?.octave ?? null);
+            this.renderPreviewBar(this.currentNoteIndex);
             this.playTips.textContent = '请按下对应按键...';
             this.isProcessingNote = false;
-        }, duration);
+        }, unlockDelay);
     }
 
     highlightNote(index) {
         const notes = this.sheetDisplay.querySelectorAll('.note');
         let activeEl = null;
         notes.forEach((note, i) => {
-            note.classList.remove('active', 'played', 'missed');
+            note.classList.remove('active', 'played', 'missed', 'note-next');
             if (i < index) {
                 note.classList.add('played');
             } else if (i === index) {
                 note.classList.add('active');
                 activeEl = note;
+            } else if (i === index + 1) {
+                // 任务2.1：下一音符淡橙高亮
+                note.classList.add('note-next');
             }
         });
-        // 任务1.1：当前行自动滚入视野，行已在视野内则不动
         activeEl?.closest('.sheet-row')
                  ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    // 任务5.2：highlightKey 支持 octave 参数
-    highlightKey(note, octave = 0) {
+    // 扩展：同时高亮当前键和下一键
+    highlightKey(note, octave = 0, nextNote = null, nextOctave = null) {
         const keys = this.keyboardGuide.querySelectorAll('.key');
         keys.forEach(key => {
-            key.classList.remove('active');
-            if (parseInt(key.dataset.note) === note &&
-                parseInt(key.dataset.octave) === octave) {
+            key.classList.remove('active', 'key-next');
+            const kn = parseInt(key.dataset.note);
+            const ko = parseInt(key.dataset.octave);
+            if (kn === note && ko === octave) {
                 key.classList.add('active');
             }
+            // 键盘上不再显示下一键高亮，仅通过预告栏提示
         });
     }
 
@@ -898,7 +1102,33 @@ class Game {
         const keyElement = this.keyboardGuide.querySelector(
             `[data-note="${pressed.note}"][data-octave="${pressed.octave}"]`
         );
+        if (e.repeat) return; // 防止长按重复触发
         this._handleNoteInput(pressed.note, pressed.octave, keyElement);
+    }
+
+    handleKeyRelease(e) {
+        if (!this.freeMode || !this.isPlaying || this.isAnswering) return;
+        const FULL_KEY_MAP = {
+            'q': { note: 1, octave: 1 }, 'w': { note: 2, octave: 1 },
+            'e': { note: 3, octave: 1 }, 'r': { note: 4, octave: 1 },
+            't': { note: 5, octave: 1 }, 'y': { note: 6, octave: 1 },
+            'u': { note: 7, octave: 1 },
+            'a': { note: 1, octave: 0 }, 's': { note: 2, octave: 0 },
+            'd': { note: 3, octave: 0 }, 'f': { note: 4, octave: 0 },
+            'g': { note: 5, octave: 0 }, 'h': { note: 6, octave: 0 },
+            'j': { note: 7, octave: 0 },
+            'z': { note: 1, octave: -1 }, 'x': { note: 2, octave: -1 },
+            'c': { note: 3, octave: -1 }, 'v': { note: 4, octave: -1 },
+            'b': { note: 5, octave: -1 }, 'n': { note: 6, octave: -1 },
+            'm': { note: 7, octave: -1 },
+        };
+        const key = e.key.toLowerCase();
+        if (!(key in FULL_KEY_MAP)) return;
+        const pressed = FULL_KEY_MAP[key];
+        const keyElement = this.keyboardGuide.querySelector(
+            `[data-note="${pressed.note}"][data-octave="${pressed.octave}"]`
+        );
+        this._handleNoteRelease(keyElement);
     }
 
     advanceToNextNote() {
@@ -914,11 +1144,16 @@ class Game {
 
         this.highlightNote(this.currentNoteIndex);
         const nn = this.currentSong.notes[this.currentNoteIndex];
-        this.highlightKey(nn.note, nn.octave ?? 0);
+        const nnxt = this.currentSong.notes[this.currentNoteIndex + 1] || null;
+        this.highlightKey(nn.note, nn.octave ?? 0,
+            nnxt?.note ?? null, nnxt?.octave ?? null);
+        this.renderPreviewBar(this.currentNoteIndex);
         this.playTips.textContent = '请按下对应按键...';
     }
 
     startAnswerPhase() {
+        // 任务3.5：答题阶段清空预告栏
+        if (this.previewBar) this.previewBar.innerHTML = '';
         this.isPlaying = false;
         this.isAnswering = true;
         this.timeRemaining = ANSWER_TIME;

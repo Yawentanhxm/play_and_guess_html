@@ -10,6 +10,14 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+    <!-- 加载遮罩 -->
+    <div class="loading-overlay hidden" id="loadingOverlay">
+        <div class="loading-box">
+            <div class="loading-spinner"></div>
+            <p class="loading-text" id="loadingText">加载音乐中...</p>
+        </div>
+    </div>
+
     <div class="game-container">
         <div class="stars" id="stars"></div>
         
@@ -46,6 +54,16 @@
             <div class="category-screen hidden" id="categoryScreen">
                 <h2 class="category-title">选择歌曲分类</h2>
                 <p class="category-desc">每个分类将随机抽取5道题目</p>
+                <div class="mode-toggle">
+                    <label class="mode-label">
+                        <input type="checkbox" id="freeModeToggle">
+                        <span class="mode-slider"></span>
+                        <span class="mode-text">
+                            <span class="mode-name">自由模式</span>
+                            <span class="mode-desc">按住发声，松开停止，自己控制节奏</span>
+                        </span>
+                    </label>
+                </div>
                 <div class="category-buttons">
                     <button class="category-btn" data-category="儿歌">
                         <span class="category-icon">🎵</span>
@@ -65,6 +83,11 @@
             <div class="play-screen hidden" id="playScreen">
                 <div class="song-info">
                     <span class="key-signature" id="keySignature"></span>
+                    <label class="mode-toggle-inline" id="playModeToggle" title="自由模式：按住发声，松开推进">
+                        <input type="checkbox" id="freeModeTogglePlay">
+                        <span class="mode-slider-sm"></span>
+                        <span class="mode-toggle-label">自由</span>
+                    </label>
                 </div>
                 <div class="sheet-display" id="sheetDisplay">
                 </div>
@@ -103,6 +126,7 @@
                         <div class="key" data-note="7" data-octave="-1"><span class="key-letter">M</span><span class="key-note">7</span></div>
                     </div>
                 </div>
+                <div id="previewBar" class="preview-bar"></div>
                 <div class="play-bottom">
                     <div class="play-tips" id="playTips">请跟随简谱弹奏...</div>
                     <button class="btn btn-skip" id="skipBtn">我猜到了 →</button>
@@ -147,7 +171,7 @@
     <script src="js/tonal.js"></script>
     <script src="js/data.js"></script>
     <script src="js/audio.js"></script>
-    <script src="js/game.js?v=14"></script>
+    <script src="js/game.js?v=16"></script>
     <script src="js/main.js"></script>
 </body>
 </html>
