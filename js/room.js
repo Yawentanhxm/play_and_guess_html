@@ -1,0 +1,424 @@
+/**
+ * js/room.js — 多人房间前端逻辑
+ * Tasks 4.3, 5.1-5.5, 6.1-6.5, 7.1-7.4
+ */
+
+// ─── 全局状态 ─────────────────────────────────────────────────
+const state = {
+  ws:         null,
+  myId:       null,
+  isHost:     false,
+  roomCode:   null,
+  role:       null,      // 'performer' | 'guesser'
+  song:       null,      // { songName?, options, notes: [] }
+  noteIndex:  0,
+  hasGuessed: false,
+  countdownTimer: null,
+  scoreSnapshot: {},     // id → score (开局前)
+};
+
+// KEY_MAP：键盘字母 → {note, octave}
+const KEY_MAP = {
+  'q':{note:1,octave:1},'w':{note:2,octave:1},'e':{note:3,octave:1},
+  'r':{note:4,octave:1},'t':{note:5,octave:1},'y':{note:6,octave:1},'u':{note:7,octave:1},
+  'a':{note:1,octave:0},'s':{note:2,octave:0},'d':{note:3,octave:0},
+  'f':{note:4,octave:0},'g':{note:5,octave:0},'h':{note:6,octave:0},'j':{note:7,octave:0},
+  'z':{note:1,octave:-1},'x':{note:2,octave:-1},'c':{note:3,octave:-1},
+  'v':{note:4,octave:-1},'b':{note:5,octave:-1},'n':{note:6,octave:-1},'m':{note:7,octave:-1},
+};
+
+// ─── DOM 引用 ─────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const entryView     = $('entryView');
+const lobbyView     = $('lobbyView');
+const performerView = $('performerView');
+const guesserView   = $('guesserView');
+const resultView    = $('resultView');
+
+// ─── 视图切换 ─────────────────────────────────────────────────
+function showView(view) {
+  [entryView, lobbyView, performerView, guesserView, resultView]
+    .forEach(v => v.classList.add('hidden'));
+  view.classList.remove('hidden');
+}
+
+// ─── Toast ────────────────────────────────────────────────────
+function showToast(msg) {
+  const wrap  = $('toastWrap');
+  const el    = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 3100);
+}
+
+// ─── 成员列表渲染 ─────────────────────────────────────────────
+function renderMembers(members) {
+  const list = $('membersList');
+  list.innerHTML = members.map(m => `
+    <div class="member-item">
+      <div class="member-avatar">${m.name.charAt(0)}</div>
+      <div class="member-name">${escHtml(m.name)}${m.id === state.myId ? ' <small style="color:#c084fc">(你)</small>' : ''}</div>
+      ${m.isHost ? '<span class="member-badge badge-host">弹奏者</span>' : ''}
+      <span class="member-badge badge-score">${m.score} 分</span>
+    </div>`).join('');
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── 简谱渲染 ─────────────────────────────────────────────────
+// notes 格式：[{note:1-7, octave:-1/0/1, midiNote}, ...]
+// 由服务端 game_start 携带（Task 3.2 中 pickSong 未解析 MIDI，
+// 简谱直接由弹奏者端在弹奏时实时推送过来，猜题者端动态追加）
+function renderSheet(containerId, notes, activeIndex = -1) {
+  const el = $(containerId);
+  el.innerHTML = '';
+  notes.forEach((n, i) => {
+    const div = document.createElement('div');
+    div.className = 'mp-note' +
+      (i === activeIndex ? ' active' : i < activeIndex ? ' played' : '');
+    div.dataset.index = i;
+
+    const dots = n.octave === 1 ? '·' : n.octave === -1 ? ',' : '';
+    div.innerHTML = `<span class="octave-dots">${n.octave === 1 ? dots : ''}</span>
+                     <span>${n.note}</span>
+                     <span class="octave-dots">${n.octave === -1 ? dots : ''}</span>`;
+    el.appendChild(div);
+  });
+}
+
+// ─── 猜题者：追加一个音符 ────────────────────────────────────
+function appendNoteToGuesserSheet(noteData) {
+  if (!state.song) return;
+  if (!state.song.notes) state.song.notes = [];
+  state.song.notes.push(noteData);
+  renderSheet('guesserSheet', state.song.notes, state.song.notes.length);
+}
+
+// ─── 倒计时 ──────────────────────────────────────────────────
+function startCountdown(startTime, totalMs, barId, textId) {
+  if (state.countdownTimer) clearInterval(state.countdownTimer);
+  const bar  = $(barId);
+  const text = $(textId);
+
+  function tick() {
+    const elapsed = Date.now() - startTime;
+    const remain  = Math.max(0, totalMs - elapsed);
+    const pct     = (remain / totalMs) * 100;
+    bar.style.width  = pct + '%';
+    text.textContent = Math.ceil(remain / 1000) + 's';
+    if (remain <= 0) clearInterval(state.countdownTimer);
+  }
+  tick();
+  state.countdownTimer = setInterval(tick, 500);
+}
+
+// ─── 键盘高亮（弹奏者） ───────────────────────────────────────
+function highlightKey(note, octave) {
+  document.querySelectorAll('#performerView .key').forEach(k => {
+    k.classList.remove('active');
+    if (parseInt(k.dataset.note) === note && parseInt(k.dataset.octave) === octave) {
+      k.classList.add('active');
+    }
+  });
+}
+
+// ─── WebSocket 连接 ───────────────────────────────────────────
+function connect(onOpen) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws    = new WebSocket(`${proto}://${location.host}`);
+  state.ws    = ws;
+
+  ws.onopen  = onOpen;
+  ws.onmessage = e => handleServerMsg(JSON.parse(e.data));
+  ws.onerror   = () => showToast('⚠️ 连接出错，请刷新页面');
+  ws.onclose   = () => showToast('⚠️ 连接断开');
+}
+
+function send(msg) {
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify(msg));
+  }
+}
+
+// ─── 服务端消息处理 ───────────────────────────────────────────
+function handleServerMsg(msg) {
+  switch (msg.type) {
+
+    // Task 4.3：joined
+    case 'joined': {
+      state.myId     = msg.yourId;
+      state.isHost   = msg.isHost;
+      state.roomCode = msg.roomCode;
+
+      $('roomCodeDisplay').textContent = msg.roomCode;
+      renderMembers(msg.members || []);
+
+      const startBtn  = $('startBtn');
+      const lobbyHint = $('lobbyHint');
+      if (state.isHost) {
+        startBtn.classList.remove('hidden');
+        lobbyHint.classList.add('hidden');
+      }
+      showView(lobbyView);
+      break;
+    }
+
+    // 成员更新
+    case 'members_update':
+      renderMembers(msg.members || []);
+      break;
+
+    // Task 5.1 / 6.1：game_start
+    case 'game_start': {
+      const isPerformer = msg.songName !== undefined;
+      state.role     = isPerformer ? 'performer' : 'guesser';
+      state.noteIndex = 0;
+      state.hasGuessed = false;
+      state.song     = {
+        songName: msg.songName || null,
+        options:  msg.options || [],
+        notes:    [],
+      };
+      // 记录开局分数快照（用于结算时计算本轮得分）
+      state.scoreSnapshot = {};
+
+      if (isPerformer) {
+        // 弹奏者视图（Task 5.1）
+        $('songNameDisplay').textContent = '🎵 ' + msg.songName;
+        $('performerSheet').innerHTML    = '<span style="color:rgba(226,217,243,0.3);font-size:13px">随弹奏实时生成简谱...</span>';
+        startCountdown(msg.startTime, 50000, 'countdownBar', 'countdownText');
+        showView(performerView);
+        document.addEventListener('keydown', handlePerformerKey);
+        document.addEventListener('keyup', handlePerformerKeyUp);
+      } else {
+        // 猜题者视图（Task 6.1）
+        $('guesserSheet').innerHTML = '';
+        renderGuessOptions(msg.options);
+        startCountdown(msg.startTime, 50000, 'gCountdownBar', 'gCountdownText');
+        showView(guesserView);
+      }
+      break;
+    }
+
+    // Task 6.2：猜题者收到音符
+    case 'note': {
+      if (state.role !== 'guesser') return;
+      audioManager.playNoteByMidi(msg.midiNote, 0.4);
+      appendNoteToGuesserSheet({ note: msg.noteNum, octave: msg.octave, midiNote: msg.midiNote });
+      break;
+    }
+
+    // Task 5.5 / 6.4：score_update
+    case 'score_update': {
+      const g = msg.guesser;
+      if (g.id === state.myId) {
+        showToast(`✅ 你猜对了！+${g.points} 分`);
+      } else if (state.role === 'performer') {
+        showToast(`🎉 ${escHtml(g.name)} 猜对了！你 +2 分`);
+      } else {
+        showToast(`🎵 ${escHtml(g.name)} 猜对了！`);
+      }
+      break;
+    }
+
+    // Task 6.3：猜错反馈
+    case 'guess_result': {
+      if (!msg.correct) showToast('❌ 猜错了，继续加油！');
+      break;
+    }
+
+    // Task 7.1-7.3：game_end
+    case 'game_end': {
+      if (state.countdownTimer) clearInterval(state.countdownTimer);
+      document.removeEventListener('keydown', handlePerformerKey);
+      document.removeEventListener('keyup', handlePerformerKeyUp);
+
+      $('resultAnswer').textContent = msg.answer;
+
+      const tbody  = $('scoreTableBody');
+      const sorted = [...(msg.scores || [])].sort((a, b) => b.score - a.score);
+      tbody.innerHTML = sorted.map((m, i) => {
+        const roundPts  = m.score - (state.scoreSnapshot[m.id] || 0);
+        const isMe      = m.id === state.myId;
+        return `<tr class="${isMe ? 'me' : ''}">
+          <td>${i + 1}</td>
+          <td>${escHtml(m.name)}${m.isHost ? ' 🎹' : ''}${isMe ? ' (你)' : ''}</td>
+          <td style="color:${roundPts > 0 ? '#34d399' : 'inherit'}">+${roundPts}</td>
+          <td><strong>${m.score}</strong></td>
+        </tr>`;
+      }).join('');
+
+      const replayBtn  = $('replayBtn');
+      const resultHint = $('resultHint');
+      if (state.isHost) {
+        replayBtn.classList.remove('hidden');
+        resultHint.classList.add('hidden');
+      }
+      showView(resultView);
+      break;
+    }
+
+    // Task 7.4：back_to_lobby
+    case 'back_to_lobby': {
+      state.role       = null;
+      state.song       = null;
+      state.noteIndex  = 0;
+      state.hasGuessed = false;
+      renderMembers(msg.members || []);
+      $('replayBtn').classList.add('hidden');
+      $('resultHint').classList.remove('hidden');
+      showView(lobbyView);
+      break;
+    }
+
+    case 'error':
+      showToast('⚠️ ' + msg.message);
+      $('entryError').textContent = msg.message;
+      break;
+  }
+}
+
+// ─── 弹奏者按键处理（Task 5.2 + 5.3）────────────────────────
+let _freeActiveNote = null;
+
+function handlePerformerKey(e) {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (!(k in KEY_MAP)) return;
+
+  const { note, octave } = KEY_MAP[k];
+  highlightKey(note, octave);
+
+  // 发声
+  const midiNote = noteToMidi(note, octave);
+  audioManager.startNote(midiNote);
+  _freeActiveNote = midiNote;
+
+  // 追加到简谱
+  if (!state.song.notes) state.song.notes = [];
+  const index = state.song.notes.length;
+  state.song.notes.push({ note, octave, midiNote });
+
+  // 更新弹奏者简谱（实时显示）
+  renderSheet('performerSheet', state.song.notes, index + 1);
+
+  // 广播给猜题者（Task 5.3）
+  send({ type: 'note', midiNote, noteNum: note, octave, index });
+}
+
+function handlePerformerKeyUp(e) {
+  if (_freeActiveNote != null) {
+    audioManager.stopNote(_freeActiveNote);
+    _freeActiveNote = null;
+  }
+  // 清除键盘高亮
+  document.querySelectorAll('#performerView .key').forEach(k => k.classList.remove('active'));
+}
+
+// MIDI 音符计算（与 game.js 同逻辑，C大调基准）
+function noteToMidi(noteNum, octave) {
+  // C大调音阶半音偏移：1→0,2→2,3→4,4→5,5→7,6→9,7→11
+  const offsets = [0, 0, 2, 4, 5, 7, 9, 11];
+  const base = 60 + offsets[noteNum]; // 中央 C 起
+  return base + octave * 12;
+}
+
+// ─── 猜题选项渲染（Task 6.1 + 6.3）──────────────────────────
+function renderGuessOptions(options) {
+  const wrap = $('guessOptions');
+  wrap.innerHTML = '';
+  options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.className   = 'option-btn-mp';
+    btn.textContent = opt;
+    btn.addEventListener('click', () => submitGuess(opt, btn, options));
+    wrap.appendChild(btn);
+  });
+}
+
+function submitGuess(answer, clickedBtn, allOptions) {
+  if (state.hasGuessed) return;
+  state.hasGuessed = true;
+
+  // 锁定所有按钮（Task 6.3）
+  $('guessOptions').querySelectorAll('.option-btn-mp').forEach(b => {
+    b.disabled = true;
+  });
+  clickedBtn.classList.add('pending'); // 等服务端反馈
+
+  send({ type: 'guess', answer });
+  $('guesserTip').textContent = '已提交，等待结果...';
+}
+
+// ─── 入口事件绑定 ─────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+
+  // 创建房间
+  $('createBtn').addEventListener('click', () => {
+    const name = $('nickInput').value.trim();
+    if (!name) { $('entryError').textContent = '请输入昵称'; return; }
+    connect(() => send({ type: 'create', name }));
+  });
+
+  // 加入房间
+  $('joinBtn').addEventListener('click', () => {
+    const name = $('nickInput').value.trim();
+    const code = $('codeInput').value.trim().toUpperCase();
+    if (!name) { $('entryError').textContent = '请输入昵称'; return; }
+    if (code.length !== 4) { $('entryError').textContent = '请输入 4 位房间码'; return; }
+    connect(() => send({ type: 'join', name, roomCode: code }));
+  });
+
+  // Enter 键快捷
+  $('codeInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('joinBtn').click();
+  });
+  $('nickInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('createBtn').click();
+  });
+
+  // 复制房间码（Task 4.4）
+  $('roomCodeBox').addEventListener('click', () => {
+    navigator.clipboard?.writeText(state.roomCode).then(() => showToast('✅ 房间码已复制'));
+  });
+
+  // 开始游戏
+  $('startBtn').addEventListener('click', () => {
+    send({ type: 'start' });
+  });
+
+  // 再来一轮
+  $('replayBtn').addEventListener('click', () => {
+    send({ type: 'replay' });
+  });
+
+  // 触屏键盘支持（弹奏者视图）
+  document.querySelectorAll('#performerView .key').forEach(key => {
+    key.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const note   = parseInt(key.dataset.note);
+      const octave = parseInt(key.dataset.octave);
+      highlightKey(note, octave);
+      const midiNote = noteToMidi(note, octave);
+      audioManager.startNote(midiNote);
+      _freeActiveNote = midiNote;
+
+      if (!state.song || !state.song.notes) return;
+      const index = state.song.notes.length;
+      state.song.notes.push({ note, octave, midiNote });
+      renderSheet('performerSheet', state.song.notes, index + 1);
+      send({ type: 'note', midiNote, noteNum: note, octave, index });
+    }, { passive: false });
+
+    ['touchend', 'touchcancel'].forEach(ev => {
+      key.addEventListener(ev, e => {
+        e.preventDefault();
+        if (_freeActiveNote != null) { audioManager.stopNote(_freeActiveNote); _freeActiveNote = null; }
+        document.querySelectorAll('#performerView .key').forEach(k => k.classList.remove('active'));
+      }, { passive: false });
+    });
+  });
+});
