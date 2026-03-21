@@ -683,6 +683,43 @@ class Game {
         this.highlightNote(0);
         const firstNote = this.currentSong.notes[0];
         this.highlightKey(firstNote.note, firstNote.octave ?? 0);
+
+        // 30秒弹奏时限：时间到强制进入答题
+        const PLAY_TIME_LIMIT = 30000;
+        this.playTimeLimit = setTimeout(() => {
+            if (!this.isPlaying || this.isAnswering) return;
+            console.log('弹奏时间到，自动进入答题');
+            this._skipToAnswer();
+        }, PLAY_TIME_LIMIT);
+
+        // 倒计时提示更新
+        let remaining = 30;
+        this.playCountdown = setInterval(() => {
+            remaining--;
+            if (remaining <= 0 || !this.isPlaying || this.isAnswering) {
+                clearInterval(this.playCountdown);
+                return;
+            }
+            this.playTips.textContent = `请按下对应按键... (${remaining}s)`;
+        }, 1000);
+
+        // Enter 键直接答题
+        this._enterHandler = (e) => {
+            if (e.key === 'Enter' && this.isPlaying && !this.isAnswering) {
+                this._skipToAnswer();
+            }
+        };
+        document.addEventListener('keydown', this._enterHandler);
+    }
+
+    _skipToAnswer() {
+        this.clearPlayInterval();
+        this.isPlaying = false;
+        this.isProcessingNote = false;
+        const keys = this.keyboardGuide.querySelectorAll('.key');
+        keys.forEach(key => key.classList.remove('active', 'pressed'));
+        document.removeEventListener('keydown', this._enterHandler);
+        this.startAnswerPhase();
     }
 
     advanceToNextNoteWithDelay() {
@@ -702,6 +739,8 @@ class Game {
             this.currentNoteIndex++;
 
             if (this.currentNoteIndex >= this.currentSong.notes.length) {
+                // 所有音符弹完，清除时限定时器
+                this.clearPlayInterval();
                 const keys = this.keyboardGuide.querySelectorAll('.key');
                 keys.forEach(key => key.classList.remove('active'));
                 audioManager.playComplete();
@@ -748,6 +787,15 @@ class Game {
         if (this.playInterval) {
             clearTimeout(this.playInterval);
             this.playInterval = null;
+        }
+        // 清除弹奏时限定时器
+        if (this.playTimeLimit) {
+            clearTimeout(this.playTimeLimit);
+            this.playTimeLimit = null;
+        }
+        if (this.playCountdown) {
+            clearInterval(this.playCountdown);
+            this.playCountdown = null;
         }
     }
 
