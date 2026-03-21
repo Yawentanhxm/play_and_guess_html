@@ -1,7 +1,10 @@
-## ADDED Requirements
+# key-detection-by-note-distribution Specification
 
+## Purpose
+TBD - created by archiving change fix-key-signature-detection. Update Purpose after archive.
+## Requirements
 ### Requirement: 根音加权使用音符出现顺序序号而非 MIDI tick 时间
-`detectKeyByNoteDistribution()` 中统计各音高首次出现时 SHALL 记录其在音符序列中的顺序编号（从 0 起），而非 MIDI tick 时间值。阈值 `< 5` 的语义 SHALL 为"该音高在前 5 个不重复音高中出现"。
+`detectKeyByNoteDistribution()` SHALL 记录各音高首次出现时的顺序编号（从 0 起），而非 MIDI tick 时间值。阈值 `< 5` 的语义 SHALL 为「该音高在前 5 个不重复音高中出现」。
 
 #### Scenario: 根音出现在曲子开头
 - **WHEN** 某调号的 root 音高在所有音符中首次出现的顺序编号 < 5
@@ -25,3 +28,4 @@
 #### Scenario: 曲子音符总数极少（< 10）
 - **WHEN** 曲子总音符数 < 10
 - **THEN** 终止音加权的样本区段取全部音符，逻辑保持一致，不做特殊处理
+

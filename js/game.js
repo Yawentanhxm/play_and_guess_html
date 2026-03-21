@@ -583,6 +583,8 @@ class Game {
 
     renderSheet() {
         this.sheetDisplay.innerHTML = '';
+        // 任务1.2：每次新歌从顶部开始
+        this.sheetDisplay.scrollTop = 0;
         const notes = this.currentSong.notes;
         const tempo = this.currentSong.tempo || 120;
 
@@ -820,14 +822,19 @@ class Game {
 
     highlightNote(index) {
         const notes = this.sheetDisplay.querySelectorAll('.note');
+        let activeEl = null;
         notes.forEach((note, i) => {
             note.classList.remove('active', 'played', 'missed');
             if (i < index) {
                 note.classList.add('played');
             } else if (i === index) {
                 note.classList.add('active');
+                activeEl = note;
             }
         });
+        // 任务1.1：当前行自动滚入视野，行已在视野内则不动
+        activeEl?.closest('.sheet-row')
+                 ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     // 任务5.2：highlightKey 支持 octave 参数
