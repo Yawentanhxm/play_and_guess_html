@@ -280,19 +280,22 @@ function handleServerMsg(msg) {
       break;
     }
 
-    // Task 7.1-7.3：game_end
-    case 'game_end': {
+    // 本轮结束（含原曲播放 + 倒计时进入下一轮）
+    case 'round_end': {
       if (state.countdownTimer) clearInterval(state.countdownTimer);
       document.removeEventListener('keydown', handlePerformerKey);
       document.removeEventListener('keyup', handlePerformerKeyUp);
+      if (state.role === 'performer' && window._gameInstance) {
+        window._gameInstance.endRoomPerformerMode();
+      }
 
       $('resultAnswer').textContent = msg.answer;
 
       const tbody  = $('scoreTableBody');
       const sorted = [...(msg.scores || [])].sort((a, b) => b.score - a.score);
       tbody.innerHTML = sorted.map((m, i) => {
-        const roundPts  = m.score - (state.scoreSnapshot[m.id] || 0);
-        const isMe      = m.id === state.myId;
+        const roundPts = m.score - (state.scoreSnapshot[m.id] || 0);
+        const isMe     = m.id === state.myId;
         return `<tr class="${isMe ? 'me' : ''}">
           <td>${i + 1}</td>
           <td>${escHtml(m.name)}${m.isHost ? ' 🎹' : ''}${isMe ? ' (你)' : ''}</td>
@@ -301,13 +304,29 @@ function handleServerMsg(msg) {
         </tr>`;
       }).join('');
 
-      const replayBtn  = $('replayBtn');
-      const resultHint = $('resultHint');
-      if (state.isHost) {
-        replayBtn.classList.remove('hidden');
-        resultHint.classList.add('hidden');
-      }
+      $('replayBtn').classList.add('hidden');
+      $('resultHint').textContent = msg.isLastRound
+        ? '🏆 全部轮次结束，正在结算...'
+        : `第 ${msg.currentRound}/${msg.totalRounds} 轮结束，10 秒后自动开始下一轮...`;
+      $('resultHint').classList.remove('hidden');
+
+      // 播放原曲
+      _playResultMidi(msg.songFile);
+      _startResultCountdown(10, msg.isLastRound);
       showView(resultView);
+      break;
+    }
+
+    // 全部轮次结束 → 最终总结算
+    case 'game_over': {
+      if (state._resultCountdownTimer) clearInterval(state._resultCountdownTimer);
+      _stopResultMidi();
+      $('resultHint').textContent = '🎊 游戏结束！';
+      if (state.isHost) {
+        $('replayBtn').textContent = '🔄 再来一局';
+        $('replayBtn').classList.remove('hidden');
+        $('resultHint').classList.add('hidden');
+      }
       break;
     }
 
@@ -317,6 +336,7 @@ function handleServerMsg(msg) {
       state.song       = null;
       state.noteIndex  = 0;
       state.hasGuessed = false;
+      _stopResultMidi();
       renderMembers(msg.members || []);
       $('replayBtn').classList.add('hidden');
       $('resultHint').classList.remove('hidden');
@@ -436,7 +456,8 @@ function _initRoomEvents() {
 
   // 开始游戏（多人大厅）
   $('roomStartBtn').addEventListener('click', () => {
-    send({ type: 'start' });
+    const rounds = parseInt($('roundsWrap')?.dataset.selected || '5');
+    send({ type: 'start', rounds });
   });
 
   // 再来一轮
@@ -472,4 +493,85 @@ function _initRoomEvents() {
   });
 }
 
+// ─── 结算页原曲播放 ───────────────────────────────────────────
+let _resultMidiEl = null;
+
+function _playResultMidi(songFile) {
+  _stopResultMidi();
+  if (!songFile) return;
+  const audio = document.createElement('audio');
+  audio.src  = `data/${songFile}`;
+  audio.autoplay = true;
+  audio.volume   = 0.6;
+  audio.style.display = 'none';
+  document.body.appendChild(audio);
+  _resultMidiEl = audio;
+}
+
+function _stopResultMidi() {
+  if (_resultMidiEl) {
+    _resultMidiEl.pause();
+    _resultMidiEl.remove();
+    _resultMidiEl = null;
+  }
+}
+
+// ─── 结算页倒计时 ─────────────────────────────────────────────
+function _startResultCountdown(seconds) {
+  if (state._resultCountdownTimer) clearInterval(state._resultCountdownTimer);
+  let remain = seconds;
+  const hint = $('resultHint');
+  const baseText = hint.textContent;
+
+  state._resultCountdownTimer = setInterval(() => {
+    remain--;
+    if (remain <= 0) {
+      clearInterval(state._resultCountdownTimer);
+    } else {
+      // 更新倒计时数字
+      hint.textContent = baseText.replace(/\d+ 秒/, `${remain} 秒`);
+    }
+  }, 1000);
+}
+
+// ─── 大厅轮数选择 UI（房主可见）─────────────────────────────
+function _initRoundsSelector() {
+  const startBtn = $('roomStartBtn');
+  if (!startBtn) return;
+
+  // 在开始按钮前插入轮数选择
+  const wrap = document.createElement('div');
+  wrap.id = 'roundsWrap';
+  wrap.style.cssText = 'text-align:center;margin-bottom:12px;';
+  wrap.innerHTML = `
+    <span style="font-size:13px;color:rgba(226,217,243,0.6);margin-right:8px;">选择轮数：</span>
+    ${[3,5,10].map(n => `
+      <button class="rounds-btn${n===5?' active':''}" data-rounds="${n}"
+        style="padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;
+               cursor:pointer;margin:0 4px;transition:all .2s;border:1px solid rgba(192,132,252,0.3);
+               background:${n===5?'rgba(192,132,252,0.2)':'rgba(255,255,255,0.04)'};
+               color:${n===5?'#c084fc':'rgba(226,217,243,0.6)'}">
+        ${n} 轮
+      </button>`).join('')}
+  `;
+  startBtn.parentNode.insertBefore(wrap, startBtn);
+
+  // 选中状态切换
+  wrap.querySelectorAll('.rounds-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      wrap.querySelectorAll('.rounds-btn').forEach(b => {
+        b.style.background = 'rgba(255,255,255,0.04)';
+        b.style.color = 'rgba(226,217,243,0.6)';
+        b.style.borderColor = 'rgba(192,132,252,0.3)';
+      });
+      btn.style.background = 'rgba(192,132,252,0.2)';
+      btn.style.color = '#c084fc';
+      btn.style.borderColor = '#c084fc';
+      wrap.dataset.selected = btn.dataset.rounds;
+    });
+  });
+  wrap.dataset.selected = '5';
+}
+
 _initRoomEvents();
+_initRoundsSelector();

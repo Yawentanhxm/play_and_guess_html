@@ -105,12 +105,65 @@ function endRound(room, timedOut = false) {
   if (room.timer) { clearTimeout(room.timer); room.timer = null; }
 
   const scores = membersPayload(room);
+  const isLastRound = room.currentRound >= room.totalRounds;
+
+  // 广播本轮结束（含原曲文件路径供客户端播放）
   broadcast(room, {
-    type:    'game_end',
-    answer:  room.song.name,
+    type:        'round_end',
+    answer:      room.song.name,
+    songFile:    room.song.file,   // 客户端用于试听原曲
     timedOut,
     scores,
+    currentRound: room.currentRound,
+    totalRounds:  room.totalRounds,
+    isLastRound,
   });
+
+  if (isLastRound) {
+    // 所有轮次结束，10s 后广播最终结算
+    room.timer = setTimeout(() => {
+      broadcast(room, { type: 'game_over', scores });
+      room.status = 'lobby';
+    }, 10000);
+  } else {
+    // 还有下一轮，10s 后自动开始
+    room.timer = setTimeout(() => startNextRound(room), 10000);
+  }
+}
+
+// ─── 开始下一轮 ──────────────────────────────────────────────
+function startNextRound(room) {
+  if (room.status !== 'ended') return;
+  room.currentRound++;
+
+  // 轮换弹奏者：按 performerOrder 顺序
+  const orderLen = room.performerOrder.length;
+  const perfId   = room.performerOrder[(room.currentRound - 1) % orderLen];
+
+  // 换弹奏者后更新 hostId（本轮弹奏者）
+  room.roundHostId = perfId;
+
+  const song = pickSong(room);
+  if (!song) return;
+
+  room.status       = 'playing';
+  room.correctOrder = [];
+  room.members.forEach(m => { m.hasGuessed = false; });
+
+  room.members.forEach((m, id) => {
+    const payload = {
+      type: 'game_start',
+      options: song.options,
+      startTime: Date.now(),
+      currentRound: room.currentRound,
+      totalRounds:  room.totalRounds,
+      performerName: room.members.get(perfId)?.name || '',
+    };
+    if (id === perfId) payload.songName = song.name;
+    sendTo(m.ws, payload);
+  });
+
+  room.timer = setTimeout(() => endRound(room, true), 50000);
 }
 
 // ─── 选曲（Task 3.1）─────────────────────────────────────────
@@ -222,6 +275,14 @@ function handleMessage(ws, clientId, msg) {
         sendTo(ws, { type: 'error', message: '至少需要 2 名玩家' }); return;
       }
 
+      // 初始化多轮游戏参数
+      const validRounds = [3, 5, 10];
+      room.totalRounds    = validRounds.includes(msg.rounds) ? msg.rounds : 5;
+      room.currentRound   = 1;
+      // 按加入顺序构建弹奏者轮转列表
+      room.performerOrder = Array.from(room.members.keys());
+      room.roundHostId    = room.performerOrder[0]; // 第1轮弹奏者
+
       const song = pickSong(room);
       if (!song) { sendTo(ws, { type: 'error', message: '暂无曲库数据' }); return; }
 
@@ -230,9 +291,17 @@ function handleMessage(ws, clientId, msg) {
       room.members.forEach(m => { m.hasGuessed = false; });
 
       // 差异化广播：弹奏者含歌名，猜题者不含
+      const perfId = room.roundHostId;
       room.members.forEach((m, id) => {
-        const payload = { type: 'game_start', options: song.options, startTime: Date.now() };
-        if (id === room.hostId) payload.songName = song.name;
+        const payload = {
+          type: 'game_start',
+          options: song.options,
+          startTime: Date.now(),
+          currentRound: room.currentRound,
+          totalRounds:  room.totalRounds,
+          performerName: room.members.get(perfId)?.name || '',
+        };
+        if (id === perfId) payload.songName = song.name;
         sendTo(m.ws, payload);
       });
 
