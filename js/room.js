@@ -289,7 +289,31 @@ function handleServerMsg(msg) {
         window._gameInstance.endRoomPerformerMode();
       }
 
-      $('resultAnswer').textContent = msg.answer;
+      // 判断本人是否猜对（弹奏者不参与猜题，特殊提示）
+      const isPerformer = state.role === 'performer';
+      const myScore     = (msg.scores || []).find(m => m.id === state.myId);
+      const myRoundPts  = myScore ? myScore.score - (state.scoreSnapshot[myScore.id] || 0) : 0;
+      const iGuessedRight = !isPerformer && myRoundPts > 0;
+
+      // 结果标题区域差异化
+      const resultAnswerEl = $('resultAnswer');
+      resultAnswerEl.textContent = msg.answer;
+
+      // 差异化横幅
+      const bannerEl = $('resultBanner');
+      if (bannerEl) {
+        if (isPerformer) {
+          bannerEl.textContent  = '🎹 本轮你是弹奏者';
+          bannerEl.className    = 'result-banner performer';
+        } else if (iGuessedRight) {
+          bannerEl.textContent  = '🎉 猜对了！';
+          bannerEl.className    = 'result-banner correct';
+        } else {
+          bannerEl.textContent  = '😢 没猜中，答案是';
+          bannerEl.className    = 'result-banner wrong';
+        }
+        bannerEl.classList.remove('hidden');
+      }
 
       const tbody  = $('scoreTableBody');
       const sorted = [...(msg.scores || [])].sort((a, b) => b.score - a.score);
@@ -307,12 +331,12 @@ function handleServerMsg(msg) {
       $('replayBtn').classList.add('hidden');
       $('resultHint').textContent = msg.isLastRound
         ? '🏆 全部轮次结束，正在结算...'
-        : `第 ${msg.currentRound}/${msg.totalRounds} 轮结束，10 秒后自动开始下一轮...`;
+        : `第 ${msg.currentRound}/${msg.totalRounds} 轮结束，5 秒后自动开始下一轮...`;
       $('resultHint').classList.remove('hidden');
 
       // 播放原曲
       _playResultMidi(msg.songFile);
-      _startResultCountdown(10, msg.isLastRound);
+      _startResultCountdown(5, msg.isLastRound);
       showView(resultView);
       break;
     }
