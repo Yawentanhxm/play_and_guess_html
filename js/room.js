@@ -238,6 +238,9 @@ function handleServerMsg(msg) {
         $('guesserSheet').innerHTML = '';
         renderGuessOptions(msg.options);
         startCountdown(msg.startTime, 50000, 'gCountdownBar', 'gCountdownText');
+        // 提前激活 AudioContext，确保后续收到 note 时能正常发声
+        const actx = audioManager.audioContext;
+        if (actx && actx.state === 'suspended') actx.resume();
         showView(guesserView);
       }
       break;
@@ -246,7 +249,14 @@ function handleServerMsg(msg) {
     // Task 6.2：猜题者收到音符
     case 'note': {
       if (state.role !== 'guesser') return;
-      audioManager.playNoteByMidi(msg.midiNote, 0.4);
+      const ctx = audioManager.audioContext;
+      const play = () => audioManager.playNoteByMidi(msg.midiNote, 0.4);
+      // AudioContext 可能因无用户交互而处于 suspended，需先 resume
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().then(play);
+      } else {
+        play();
+      }
       appendNoteToGuesserSheet({ note: msg.noteNum, octave: msg.octave, midiNote: msg.midiNote });
       break;
     }
