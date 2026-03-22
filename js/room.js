@@ -15,6 +15,7 @@ const state = window.roomState = {
   song:       null,      // { songName?, options, notes: [] }
   noteIndex:  0,
   hasGuessed: false,
+  guessedCorrect: false, // 本轮是否猜对
   countdownTimer: null,
   scoreSnapshot: {},     // id → score (开局前)
 };
@@ -187,7 +188,8 @@ function handleServerMsg(msg) {
       const isPerformer = msg.songName !== undefined;
       state.role     = isPerformer ? 'performer' : 'guesser';
       state.noteIndex = 0;
-      state.hasGuessed = false;
+      state.hasGuessed    = false;
+      state.guessedCorrect = false;
       state.song     = {
         songName: msg.songName || null,
         options:  msg.options || [],
@@ -265,6 +267,7 @@ function handleServerMsg(msg) {
     case 'score_update': {
       const g = msg.guesser;
       if (g.id === state.myId) {
+        state.guessedCorrect = true;  // ← 标记本人猜对
         showToast(`✅ 你猜对了！+${g.points} 分`);
       } else if (state.role === 'performer') {
         showToast(`🎉 ${escHtml(g.name)} 猜对了！你 +2 分`);
@@ -290,10 +293,8 @@ function handleServerMsg(msg) {
       }
 
       // 判断本人是否猜对（弹奏者不参与猜题，特殊提示）
-      const isPerformer = state.role === 'performer';
-      const myScore     = (msg.scores || []).find(m => m.id === state.myId);
-      const myRoundPts  = myScore ? myScore.score - (state.scoreSnapshot[myScore.id] || 0) : 0;
-      const iGuessedRight = !isPerformer && myRoundPts > 0;
+      const isPerformer   = state.role === 'performer';
+      const iGuessedRight = !isPerformer && state.guessedCorrect;
 
       // 结果标题区域差异化
       const resultAnswerEl = $('resultAnswer');
@@ -356,10 +357,11 @@ function handleServerMsg(msg) {
 
     // Task 7.4：back_to_lobby
     case 'back_to_lobby': {
-      state.role       = null;
-      state.song       = null;
-      state.noteIndex  = 0;
-      state.hasGuessed = false;
+      state.role           = null;
+      state.song           = null;
+      state.noteIndex      = 0;
+      state.hasGuessed     = false;
+      state.guessedCorrect = false;
       _stopResultMidi();
       renderMembers(msg.members || []);
       $('replayBtn').classList.add('hidden');
