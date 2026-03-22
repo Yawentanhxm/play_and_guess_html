@@ -315,7 +315,8 @@ function handleMessage(ws, clientId, msg) {
       const code = ws._roomCode;
       if (!code || !rooms.has(code)) return;
       const room = rooms.get(code);
-      if (clientId !== room.hostId || room.status !== 'playing') return;
+      const perfId = room.roundHostId || room.hostId;
+      if (clientId !== perfId || room.status !== 'playing') return;
 
       broadcast(room, {
         type:     'note',
@@ -323,7 +324,7 @@ function handleMessage(ws, clientId, msg) {
         noteNum:  msg.noteNum,
         octave:   msg.octave,
         index:    msg.index,
-      }, room.hostId); // 不发给弹奏者自己
+      }, perfId); // 不发给本轮弹奏者自己
       break;
     }
 
@@ -332,7 +333,8 @@ function handleMessage(ws, clientId, msg) {
       const code = ws._roomCode;
       if (!code || !rooms.has(code)) return;
       const room = rooms.get(code);
-      if (clientId !== room.hostId || room.status !== 'playing') return;
+      const perfId = room.roundHostId || room.hostId;
+      if (clientId !== perfId || room.status !== 'playing') return;
       endRound(room, false);
       break;
     }
@@ -344,7 +346,8 @@ function handleMessage(ws, clientId, msg) {
       const room   = rooms.get(code);
       const member = room.members.get(clientId);
       if (!member || member.hasGuessed || room.status !== 'playing') return;
-      if (clientId === room.hostId) return; // 弹奏者不能猜
+      const currentPerformer = room.roundHostId || room.hostId;
+      if (clientId === currentPerformer) return; // 本轮弹奏者不能猜
 
       member.hasGuessed = true;
       const correct = msg.answer === room.song.name;
@@ -355,9 +358,9 @@ function handleMessage(ws, clientId, msg) {
         const points  = GUESSER_SCORES[rank - 1] ?? 0;
         member.score += points;
 
-        // 弹奏者 +2
-        const host = room.members.get(room.hostId);
-        if (host) host.score += 2;
+        // 本轮弹奏者 +2
+        const performer = room.members.get(currentPerformer);
+        if (performer) performer.score += 2;
 
         broadcast(room, {
           type:    'score_update',
@@ -365,14 +368,19 @@ function handleMessage(ws, clientId, msg) {
           scores:  membersPayload(room),
         });
 
-        // 全员猜对？
-        const guessers = Array.from(room.members.keys()).filter(id => id !== room.hostId);
-        if (guessers.every(id => room.members.get(id)?.hasGuessed)) {
+        // 全员答完（含猜对/猜错）？排除本轮弹奏者
+        const guessers = Array.from(room.members.keys()).filter(id => id !== currentPerformer);
+        if (guessers.length > 0 && guessers.every(id => room.members.get(id)?.hasGuessed)) {
           endRound(room, false);
         }
       } else {
         // 猜错：只通知本人
         sendTo(ws, { type: 'guess_result', correct: false });
+        // 猜错也算答完，检查全员是否都答完
+        const guessers2 = Array.from(room.members.keys()).filter(id => id !== currentPerformer);
+        if (guessers2.length > 0 && guessers2.every(id => room.members.get(id)?.hasGuessed)) {
+          endRound(room, false);
+        }
       }
       break;
     }
