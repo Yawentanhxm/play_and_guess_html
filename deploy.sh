@@ -118,13 +118,21 @@ install_nginx() {
     success "Nginx 安装完成"
 }
 
-# ── 安装依赖 ─────────────────────────────────────────────────
+# ── 拉取最新代码 + 安装依赖 ──────────────────────────────────
 deploy_code() {
-    step "安装 npm 依赖"
+    step "拉取最新代码 & 安装依赖"
     cd "$APP_DIR"
     [ ! -f "package.json" ] && error "未在 $APP_DIR 找到 package.json，请确认在项目目录下运行"
+
+    if [ -d ".git" ]; then
+        info "执行 git pull..."
+        git pull origin master 2>/dev/null || git pull origin main 2>/dev/null || warn "git pull 失败，继续使用当前代码"
+    else
+        warn "当前目录不是 git 仓库，跳过 git pull"
+    fi
+
     npm install --production --registry=https://registry.npmmirror.com
-    success "依赖安装完成"
+    success "代码已是最新，依赖安装完成"
 }
 
 # ── 配置并启动 PM2 ────────────────────────────────────────────
