@@ -1158,3 +1158,172 @@ body {
         font-size: 24px;
     }
 }
+
+/* ═══════════════════════════════════════════
+   模式选择首页
+═══════════════════════════════════════════ */
+.mode-select-screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+    z-index: 50;
+}
+.mode-select-screen.hidden { display: none !important; }
+
+.mode-select-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.mode-select-inner {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    padding: 40px 24px;
+    width: 100%;
+    max-width: 600px;
+}
+
+.mode-select-title {
+    font-size: 48px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, #c084fc, #00f5d4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-family: var(--font-mono);
+}
+
+.mode-select-subtitle {
+    font-size: 16px;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 48px;
+    letter-spacing: 1px;
+}
+
+.mode-cards {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.mode-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(192,132,252,0.25);
+    border-radius: 24px;
+    padding: 36px 32px;
+    width: 220px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+.mode-card:hover {
+    border-color: #c084fc;
+    background: rgba(192,132,252,0.1);
+    transform: translateY(-6px);
+    box-shadow: 0 16px 40px rgba(123,44,191,0.25);
+}
+.mode-card-multi {
+    border-color: rgba(0,245,212,0.25);
+}
+.mode-card-multi:hover {
+    border-color: #00f5d4;
+    background: rgba(0,245,212,0.08);
+    box-shadow: 0 16px 40px rgba(0,245,212,0.2);
+}
+
+.mode-card-icon {
+    font-size: 48px;
+    line-height: 1;
+}
+
+.mode-card-name {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.mode-card-desc {
+    font-size: 13px;
+    color: rgba(255,255,255,0.5);
+    line-height: 1.5;
+    text-align: center;
+}
+
+.mode-card-btn {
+    margin-top: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #c084fc;
+    letter-spacing: 0.5px;
+}
+.mode-card-multi .mode-card-btn { color: #00f5d4; }
+
+/* ═══════════════════════════════════════════
+   多人容器包装
+═══════════════════════════════════════════ */
+.multi-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0a051e 0%, #0d0826 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 40px;
+    color: #e2d9f3;
+}
+.multi-container.hidden { display: none !important; }
+
+.multi-topbar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    padding: 14px 24px;
+    background: rgba(0,0,0,0.3);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(192,132,252,0.15);
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+
+.btn-back {
+    background: rgba(192,132,252,0.1);
+    border: 1px solid rgba(192,132,252,0.3);
+    color: #c084fc;
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+.btn-back:hover {
+    background: rgba(192,132,252,0.2);
+    transform: translateX(-2px);
+}
+
+.multi-topbar-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: rgba(226,217,243,0.7);
+}
+
+.multi-container > .room-card,
+.multi-container > .lobby-view,
+.multi-container > .game-view,
+.multi-container > .result-view {
+    margin-top: 40px;
+}
+

@@ -1,0 +1,13 @@
+{
+  "name": "play-and-guess",
+  "version": "1.0.0",
+  "description": "你弹我猜 - 多人实时音乐猜歌游戏",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.20.0"
+  }
+}

@@ -457,7 +457,8 @@ class Game {
     }
 
     createStars() {
-        const starsContainer = document.getElementById('stars');
+        const starsContainer = document.getElementById('starsSolo') || document.getElementById('stars');
+        if (!starsContainer) return;
         for (let i = 0; i < 50; i++) {
             const star = document.createElement('div');
             star.className = 'star';
@@ -512,21 +513,44 @@ class Game {
         if (overlay) overlay.classList.add('hidden');
     }
 
+    // 预加载 MIDI：页面启动时就开始，单人/多人都能用
+    preloadSongs() {
+        if (this._songsPromise) return this._songsPromise;
+        this.showLoadingOverlay('加载音乐中...');
+        this._songsPromise = loadMidiIndex()
+            .then(() => this.loadMIDISongs())
+            .then(() => {
+                this._songsLoaded = true;
+                this.hideLoadingOverlay();
+                console.log('MIDI 预加载完成，共', SONGS.length, '首');
+                if (typeof window.onSongsReady === 'function') window.onSongsReady();
+            })
+            .catch(err => {
+                this._songsPromise = null; // 失败可重试
+                this.hideLoadingOverlay();
+                console.error('MIDI 加载失败:', err);
+            });
+        return this._songsPromise;
+    }
+
     startGame() {
         this.currentLevel = 1;
         this.score = 0;
         this.updateDisplay();
 
-        this.showLoadingOverlay('加载音乐中...');
-        // 先加载目录索引，再解析 MIDI 文件
-        loadMidiIndex().then(() => this.loadMIDISongs()).then(() => {
-            this.hideLoadingOverlay();
+        const proceed = () => {
             console.log('MIDI loading complete, showing category screen');
             this.showCategoryScreen();
-        }).catch(err => {
-            this.hideLoadingOverlay();
-            console.error('加载失败:', err);
-        });
+        };
+
+        if (this._songsLoaded) {
+            proceed();
+        } else {
+            // 未加载完则等待（preloadSongs 已在后台跑）
+            this._songsPromise
+                ? this._songsPromise.then(proceed)
+                : this.preloadSongs().then(proceed);
+        }
     }
 
     async loadMIDISongs() {
@@ -858,6 +882,11 @@ class Game {
         if (pressedNote === expectedNote && pressedOctave === expectedOctave) {
             this.isProcessingNote = true;
 
+            // 多人模式钩子：通知 room.js 广播此音符给猜题者
+            if (typeof window.onRoomNoteCorrect === 'function') {
+                window.onRoomNoteCorrect(currentNote);
+            }
+
             const tempo = this.currentSong.tempo || 120;
             const noteDurationSec = (60 / tempo) * currentNote.duration;
 
@@ -1053,6 +1082,49 @@ class Game {
         });
     }
 
+    // ─── 多人模式：弹奏者直接开始弹奏 ───────────────────────
+    // song: { name, notes, keySignature, keyName, tempo }
+    startRoomPerformerMode(song) {
+        // 确保单人容器可见，多人容器隐藏
+        const soloEl = document.getElementById('soloContainer');
+        const multiEl = document.getElementById('multiContainer');
+        if (soloEl)  soloEl.classList.remove('hidden');
+        if (multiEl) multiEl.classList.add('hidden');
+
+        // 注入歌曲
+        this.currentSong      = song;
+        this.currentNoteIndex = 0;
+        this.isPlaying        = true;
+        this.isAnswering      = false;
+        this.isProcessingNote = false;
+
+        // 显示调号 + 歌名（多人模式显示）
+        if (this.keySignatureDisplay) {
+            this.keySignatureDisplay.innerHTML =
+                `🎵 ${song.name}` +
+                (song.keyName ? `  <small style="opacity:.6">${song.keyName}</small>` : '') +
+                (this.freeMode ? ' <span class="mode-badge">自由模式</span>' : '');
+        }
+
+        this.showScreen('play');
+        this.renderSheet();
+        this.renderKeyboard();
+        this.playTips.textContent = '按照简谱弹奏，让朋友来猜！';
+        this.playNotes();
+    }
+
+    // ─── 多人模式：弹奏结束后回到多人界面 ───────────────────
+    endRoomPerformerMode() {
+        this.isPlaying  = false;
+        this.isAnswering = false;
+        this.clearPlayInterval();
+        // 恢复多人容器可见
+        const soloEl  = document.getElementById('soloContainer');
+        const multiEl = document.getElementById('multiContainer');
+        if (soloEl)  soloEl.classList.add('hidden');
+        if (multiEl) multiEl.classList.remove('hidden');
+    }
+
     clearPlayInterval() {
         if (this.playInterval) {
             clearTimeout(this.playInterval);
@@ -1152,6 +1224,12 @@ class Game {
     }
 
     startAnswerPhase() {
+        // 多人模式：弹奏者弹完后交给服务器处理，不进本地答题
+        if (typeof window.onRoomPerformerFinished === 'function') {
+            window.onRoomPerformerFinished();
+            return;
+        }
+
         // 任务3.5：答题阶段清空预告栏
         if (this.previewBar) this.previewBar.innerHTML = '';
         this.isPlaying = false;
