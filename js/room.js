@@ -263,23 +263,14 @@ function handleServerMsg(msg) {
       break;
     }
 
-    // Task 5.5 / 6.4：score_update
-    case 'score_update': {
-      const g = msg.guesser;
-      if (g.id === state.myId) {
-        state.guessedCorrect = true;  // ← 标记本人猜对
-        showToast(`✅ 你猜对了！+${g.points} 分`);
-      } else if (state.role === 'performer') {
-        showToast(`🎉 ${escHtml(g.name)} 猜对了！你 +2 分`);
-      } else {
-        showToast(`🎵 ${escHtml(g.name)} 猜对了！`);
-      }
-      break;
-    }
-
-    // Task 6.3：猜错反馈
+    // 猜题结果（仅本人可见）
     case 'guess_result': {
-      if (!msg.correct) showToast('❌ 猜错了，继续加油！');
+      if (msg.correct) {
+        state.guessedCorrect = true;
+        showToast(`✅ 猜对了！本轮 +${msg.points} 分`);
+      } else {
+        showToast('❌ 猜错了，等待本轮结束...');
+      }
       break;
     }
 

@@ -354,33 +354,26 @@ function handleMessage(ws, clientId, msg) {
 
       if (correct) {
         room.correctOrder.push(clientId);
-        const rank    = room.correctOrder.length;
-        const points  = GUESSER_SCORES[rank - 1] ?? 0;
+        const rank   = room.correctOrder.length;
+        const points = GUESSER_SCORES[rank - 1] ?? 0;
         member.score += points;
 
-        // 本轮弹奏者 +2
-        const performer = room.members.get(currentPerformer);
-        if (performer) performer.score += 2;
-
-        broadcast(room, {
-          type:    'score_update',
-          guesser: { id: clientId, name: member.name, points },
-          scores:  membersPayload(room),
-        });
-
-        // 全员答完（含猜对/猜错）？排除本轮弹奏者
-        const guessers = Array.from(room.members.keys()).filter(id => id !== currentPerformer);
-        if (guessers.length > 0 && guessers.every(id => room.members.get(id)?.hasGuessed)) {
-          endRound(room, false);
-        }
+        // 仅通知本人猜对 + 得分，不广播给全员（避免泄露答案）
+        sendTo(ws, { type: 'guess_result', correct: true, points });
       } else {
         // 猜错：只通知本人
         sendTo(ws, { type: 'guess_result', correct: false });
-        // 猜错也算答完，检查全员是否都答完
-        const guessers2 = Array.from(room.members.keys()).filter(id => id !== currentPerformer);
-        if (guessers2.length > 0 && guessers2.every(id => room.members.get(id)?.hasGuessed)) {
-          endRound(room, false);
+      }
+
+      // 全员答完？排除本轮弹奏者
+      const guessers = Array.from(room.members.keys()).filter(id => id !== currentPerformer);
+      if (guessers.length > 0 && guessers.every(id => room.members.get(id)?.hasGuessed)) {
+        // 弹奏者本轮只加一次分（有人猜对才加）
+        if (room.correctOrder.length > 0) {
+          const performer = room.members.get(currentPerformer);
+          if (performer) performer.score += 2;
         }
+        endRound(room, false);
       }
       break;
     }
