@@ -122,7 +122,7 @@ install_nginx() {
 # ── 拉取/更新代码 ─────────────────────────────────────────────
 deploy_code() {
     step "部署代码"
-    if [ "$REPO_URL" = "https://github.com/你的用户名/你弹我猜_html.git" ]; then
+    if [ "$REPO_URL" = "https://github.com/Yawentanhxm/play_and_guess_html.git" ]; then
         error "请先修改脚本中的 REPO_URL 为你的实际仓库地址！"
     fi
 
