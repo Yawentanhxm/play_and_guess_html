@@ -332,7 +332,7 @@ function handleServerMsg(msg) {
       $('replayBtn').classList.add('hidden');
       $('resultHint').textContent = msg.isLastRound
         ? '🏆 全部轮次结束，正在结算...'
-        : `第 ${msg.currentRound}/${msg.totalRounds} 轮结束，5 秒后自动开始下一轮...`;
+        : `第 ${msg.currentRound}/${msg.totalRounds} 轮结束，即将开始下一轮...`;
       $('resultHint').classList.remove('hidden');
 
       // 播放原曲

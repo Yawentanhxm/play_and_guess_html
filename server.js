@@ -120,14 +120,14 @@ function endRound(room, timedOut = false) {
   });
 
   if (isLastRound) {
-    // 所有轮次结束，5s 后广播最终结算
+    // 所有轮次结束，1s 后广播最终结算
     room.timer = setTimeout(() => {
       broadcast(room, { type: 'game_over', scores });
       room.status = 'lobby';
-    }, 5000);
+    }, 1000);
   } else {
-    // 还有下一轮，5s 后自动开始
-    room.timer = setTimeout(() => startNextRound(room), 5000);
+    // 还有下一轮，1s 后自动开始
+    room.timer = setTimeout(() => startNextRound(room), 1000);
   }
 }
 
