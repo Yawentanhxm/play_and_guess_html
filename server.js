@@ -27,9 +27,13 @@ const MIME = {
 // ─── HTTP 静态文件服务（Task 1.2 + 1.3）──────────────────────
 const server = http.createServer((req, res) => {
   let urlPath = req.url.split('?')[0];
-  if (urlPath === '/') urlPath = '/room.html';
+  if (urlPath === '/') urlPath = '/index.html';
 
-  const filePath = path.join(ROOT, urlPath);
+  // 解码 URL 中的中文及特殊字符（如 %E6%B5%81%E8%A1%8C → 流行）
+  let decoded;
+  try { decoded = decodeURIComponent(urlPath); } catch { decoded = urlPath; }
+
+  const filePath = path.join(ROOT, decoded);
   const ext      = path.extname(filePath).toLowerCase();
   const mime     = MIME[ext] || 'application/octet-stream';
 
@@ -254,6 +258,16 @@ function handleMessage(ws, clientId, msg) {
       break;
     }
 
+    // 弹奏者弹完通知
+    case 'performer_done': {
+      const code = ws._roomCode;
+      if (!code || !rooms.has(code)) return;
+      const room = rooms.get(code);
+      if (clientId !== room.hostId || room.status !== 'playing') return;
+      endRound(room, false);
+      break;
+    }
+
     // Task 3.4：猜题处理
     case 'guess': {
       const code = ws._roomCode;
@@ -320,6 +334,6 @@ function handleMessage(ws, clientId, msg) {
 loadSongIndex();
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[Server] 你弹我猜 多人服务 running at:`);
-  console.log(`  Local:   http://localhost:${PORT}/room.html`);
-  console.log(`  Network: http://<your-ip>:${PORT}/room.html`);
+  console.log(`  Local:   http://localhost:${PORT}/`);
+  console.log(`  Network: http://<your-ip>:${PORT}/`);
 });

@@ -4,7 +4,9 @@
  */
 
 // ─── 全局状态 ─────────────────────────────────────────────────
-const state = {
+// 暴露到 window 以便模式切换时可断开连接
+window.roomState = null;
+const state = window.roomState = {
   ws:         null,
   myId:       null,
   isHost:     false,
@@ -17,8 +19,8 @@ const state = {
   scoreSnapshot: {},     // id → score (开局前)
 };
 
-// KEY_MAP：键盘字母 → {note, octave}
-const KEY_MAP = {
+// ROOM_KEY_MAP：多人模式键盘字母 → {note, octave}
+const ROOM_KEY_MAP = {
   'q':{note:1,octave:1},'w':{note:2,octave:1},'e':{note:3,octave:1},
   'r':{note:4,octave:1},'t':{note:5,octave:1},'y':{note:6,octave:1},'u':{note:7,octave:1},
   'a':{note:1,octave:0},'s':{note:2,octave:0},'d':{note:3,octave:0},
@@ -29,6 +31,7 @@ const KEY_MAP = {
 
 // ─── DOM 引用 ─────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
+console.log('[room.js] 开始初始化，createBtn=', document.getElementById('createBtn'));
 const entryView     = $('entryView');
 const lobbyView     = $('lobbyView');
 const performerView = $('performerView');
@@ -37,9 +40,13 @@ const resultView    = $('resultView');
 
 // ─── 视图切换 ─────────────────────────────────────────────────
 function showView(view) {
+  // 确保多人容器本身可见
+  const mc = document.getElementById('multiContainer');
+  if (mc) mc.classList.remove('hidden');
+  // 切换内部子视图
   [entryView, lobbyView, performerView, guesserView, resultView]
-    .forEach(v => v.classList.add('hidden'));
-  view.classList.remove('hidden');
+    .forEach(v => v && v.classList.add('hidden'));
+  if (view) view.classList.remove('hidden');
 }
 
 // ─── Toast ────────────────────────────────────────────────────
@@ -156,7 +163,7 @@ function handleServerMsg(msg) {
       $('roomCodeDisplay').textContent = msg.roomCode;
       renderMembers(msg.members || []);
 
-      const startBtn  = $('startBtn');
+      const startBtn  = $('roomStartBtn');
       const lobbyHint = $('lobbyHint');
       if (state.isHost) {
         startBtn.classList.remove('hidden');
@@ -186,13 +193,42 @@ function handleServerMsg(msg) {
       state.scoreSnapshot = {};
 
       if (isPerformer) {
-        // 弹奏者视图（Task 5.1）
-        $('songNameDisplay').textContent = '🎵 ' + msg.songName;
-        $('performerSheet').innerHTML    = '<span style="color:rgba(226,217,243,0.3);font-size:13px">随弹奏实时生成简谱...</span>';
-        startCountdown(msg.startTime, 50000, 'countdownBar', 'countdownText');
-        showView(performerView);
-        document.addEventListener('keydown', handlePerformerKey);
-        document.addEventListener('keyup', handlePerformerKeyUp);
+        // 弹奏者视图：复用单人模式界面（Task 5.1）
+        // 挂钩子：每次按对音符 → 广播给猜题者
+        window.onRoomNoteCorrect = (note) => {
+          send({ type: 'note', midiNote: note.midiNote, noteNum: note.note, octave: note.octave ?? 0 });
+        };
+        // 挂钩子：弹奏结束 → 通知服务器结束本轮
+        window.onRoomPerformerFinished = () => {
+          window.onRoomNoteCorrect = null;
+          window.onRoomPerformerFinished = null;
+          // 回到多人界面（等待服务器推 game_end）
+          if (window._gameInstance) window._gameInstance.endRoomPerformerMode();
+          send({ type: 'performer_done' });
+        };
+        // 等 MIDI 曲库加载完后再启动弹奏
+        const startPerformer = () => {
+          const localSong = (typeof SONGS !== 'undefined')
+            ? SONGS.find(s => s.name === msg.songName)
+            : null;
+          if (!localSong) {
+            showToast('⚠️ 找不到歌曲数据：' + msg.songName);
+            return;
+          }
+          if (window._gameInstance) {
+            window._gameInstance.startRoomPerformerMode(localSong);
+          }
+        };
+
+        if (window._gameInstance && window._gameInstance._songsLoaded) {
+          startPerformer();
+        } else if (window._gameInstance) {
+          // 曲库还在加载中，等加载完再启动
+          window.onSongsReady = startPerformer;
+          showToast('🎵 曲库加载中，请稍候...');
+        } else {
+          showToast('⚠️ 游戏实例未就绪，请刷新页面');
+        }
       } else {
         // 猜题者视图（Task 6.1）
         $('guesserSheet').innerHTML = '';
@@ -287,9 +323,9 @@ let _freeActiveNote = null;
 function handlePerformerKey(e) {
   if (e.repeat) return;
   const k = e.key.toLowerCase();
-  if (!(k in KEY_MAP)) return;
+  if (!(k in ROOM_KEY_MAP)) return;
 
-  const { note, octave } = KEY_MAP[k];
+  const { note, octave } = ROOM_KEY_MAP[k];
   highlightKey(note, octave);
 
   // 发声
@@ -354,8 +390,9 @@ function submitGuess(answer, clickedBtn, allOptions) {
 }
 
 // ─── 入口事件绑定 ─────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-
+// 脚本在 </body> 前加载，DOM 已就绪，直接绑定无需等 DOMContentLoaded
+function _initRoomEvents() {
+    console.log('初始化房间事件绑定');
   // 创建房间
   $('createBtn').addEventListener('click', () => {
     const name = $('nickInput').value.trim();
@@ -385,8 +422,8 @@ document.addEventListener('DOMContentLoaded', () => {
     navigator.clipboard?.writeText(state.roomCode).then(() => showToast('✅ 房间码已复制'));
   });
 
-  // 开始游戏
-  $('startBtn').addEventListener('click', () => {
+  // 开始游戏（多人大厅）
+  $('roomStartBtn').addEventListener('click', () => {
     send({ type: 'start' });
   });
 
@@ -421,4 +458,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }, { passive: false });
     });
   });
-});
+}
+
+_initRoomEvents();

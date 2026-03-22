@@ -1,5 +1,5 @@
 /* css/room.css — 多人房间样式，复用 style.css 变量 */
-@import url('style.css');
+/* 注：style.css 已在 index.html 中直接引入，此处不再 @import 避免重复 */
 
 /* ── 页面通用 ── */
 .room-page {
