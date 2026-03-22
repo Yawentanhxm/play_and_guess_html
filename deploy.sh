@@ -7,17 +7,16 @@
 #    chmod +x deploy.sh && sudo bash deploy.sh
 #
 #  可选环境变量（覆盖默认值）：
-#    REPO_URL   Git 仓库地址（默认已填写）
 #    APP_PORT   游戏端口（默认 3000）
 #    DOMAIN     绑定的域名（留空则只用 IP 访问）
-#    APP_DIR    安装目录（默认 /var/www/yinle-game）
+#    APP_DIR    项目目录（默认当前目录）
 # ═══════════════════════════════════════════════════════════════
 
 set -e  # 遇到错误立即退出
 
 # ── 配置（按需修改） ──────────────────────────────────────────
-REPO_URL="${REPO_URL:-https://github.com/你的用户名/你弹我猜_html.git}"
-APP_DIR="${APP_DIR:-/var/www/yinle-game}"
+# 代码就在当前目录，无需 git clone
+APP_DIR="${APP_DIR:-$(pwd)}"
 APP_PORT="${APP_PORT:-3000}"
 APP_NAME="yinle-game"
 NODE_VERSION="20"   # Node.js 大版本号
@@ -119,28 +118,13 @@ install_nginx() {
     success "Nginx 安装完成"
 }
 
-# ── 拉取/更新代码 ─────────────────────────────────────────────
+# ── 安装依赖 ─────────────────────────────────────────────────
 deploy_code() {
-    step "部署代码"
-    if [ "$REPO_URL" = "https://github.com/Yawentanhxm/play_and_guess_html.git" ]; then
-        error "请先修改脚本中的 REPO_URL 为你的实际仓库地址！"
-    fi
-
-    mkdir -p "$(dirname "$APP_DIR")"
-
-    if [ -d "$APP_DIR/.git" ]; then
-        info "检测到已有代码，执行 git pull 更新..."
-        cd "$APP_DIR"
-        git pull origin master || git pull origin main
-    else
-        info "克隆仓库到 $APP_DIR ..."
-        git clone "$REPO_URL" "$APP_DIR"
-        cd "$APP_DIR"
-    fi
-
-    info "安装 npm 依赖..."
+    step "安装 npm 依赖"
+    cd "$APP_DIR"
+    [ ! -f "package.json" ] && error "未在 $APP_DIR 找到 package.json，请确认在项目目录下运行"
     npm install --production --registry=https://registry.npmmirror.com
-    success "代码部署完成"
+    success "依赖安装完成"
 }
 
 # ── 配置并启动 PM2 ────────────────────────────────────────────
