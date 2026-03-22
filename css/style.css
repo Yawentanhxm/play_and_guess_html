@@ -1269,6 +1269,17 @@ body {
 }
 .mode-card-multi .mode-card-btn { color: #00f5d4; }
 
+.mode-card-practice {
+    border-color: rgba(250,204,21,0.25);
+    text-decoration: none; color: inherit;
+}
+.mode-card-practice:hover {
+    border-color: #fbbf24;
+    background: rgba(251,191,36,0.08);
+    box-shadow: 0 16px 40px rgba(251,191,36,0.18);
+}
+.mode-card-practice .mode-card-btn { color: #fbbf24; }
+
 /* ═══════════════════════════════════════════
    多人容器包装
 ═══════════════════════════════════════════ */
@@ -1325,5 +1336,55 @@ body {
 .multi-container > .game-view,
 .multi-container > .result-view {
     margin-top: 40px;
+}
+
+/* ═══════════════════════════════════════════
+   试听旋律按钮（多人弹奏者预览阶段）
+═══════════════════════════════════════════ */
+.preview-btn {
+    display: block;
+    margin: 16px auto 8px;
+    padding: 14px 40px;
+    background: linear-gradient(135deg, #7b2cbf, #c084fc);
+    border: none;
+    border-radius: 50px;
+    color: #fff;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 1px;
+    box-shadow: 0 6px 24px rgba(123,44,191,0.4);
+    transition: all 0.2s ease;
+    animation: pulse-preview 1.8s ease-in-out infinite;
+}
+.preview-btn:hover:not(:disabled) {
+    transform: translateY(-3px) scale(1.04);
+    box-shadow: 0 10px 32px rgba(192,132,252,0.5);
+}
+.preview-btn:disabled {
+    background: linear-gradient(135deg, #4a4a6a, #6a6a9a);
+    box-shadow: none;
+    animation: none;
+    cursor: default;
+}
+
+@keyframes pulse-preview {
+    0%, 100% { box-shadow: 0 6px 24px rgba(123,44,191,0.4); }
+    50%       { box-shadow: 0 6px 36px rgba(192,132,252,0.7); }
+}
+
+/* 直接开始弹奏按钮（绿色系，区别于紫色试听按钮） */
+.preview-btn-start {
+    background: linear-gradient(135deg, #059669, #10b981);
+    box-shadow: 0 6px 24px rgba(16,185,129,0.35);
+    animation: pulse-start 1.8s ease-in-out infinite;
+    margin-top: 8px;
+}
+.preview-btn-start:hover:not(:disabled) {
+    box-shadow: 0 10px 32px rgba(16,185,129,0.5);
+}
+@keyframes pulse-start {
+    0%, 100% { box-shadow: 0 6px 24px rgba(16,185,129,0.35); }
+    50%       { box-shadow: 0 6px 36px rgba(16,185,129,0.6); }
 }
 

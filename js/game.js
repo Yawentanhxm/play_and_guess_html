@@ -330,16 +330,30 @@ function extractNotesFromMidi(midiData) {
         .sort((a, b) => a[0] - b[0])
         .map(([, note]) => note);
 
+    // 用 ppq（每拍 tick 数）把 durationTicks 换算成拍数，保留精度
+    const ppq = midiData.header?.ppq || 480;
+
     const notes = [];
     for (const note of sortedNotes) {
         const midiNote = note.midi;
         // 任务2.1 + 2.2：计算 note + octave
         const { noteNum, octave } = midiToJianpu(midiNote, keySignature);
 
-        let durationValue = 1;
-        if (note.duration >= 3.5) durationValue = 2;
-        else if (note.duration >= 1.75) durationValue = 1.5;
-        else if (note.duration <= 0.75) durationValue = 0.5;
+        // 用 ticks 精确计算时值（以拍为单位）
+        let durationBeats;
+        if (note.durationTicks !== undefined && note.durationTicks > 0) {
+            durationBeats = note.durationTicks / ppq;
+        } else {
+            // 回退：用秒数 × BPM / 60
+            const bpm = midiData.bpm || midiData.header?.tempos?.[0]?.bpm || 120;
+            durationBeats = note.duration * (bpm / 60);
+        }
+
+        // 量化到最近的标准时值（保留更多档位）
+        const stdDurations = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4];
+        const durationValue = stdDurations.reduce((prev, curr) =>
+            Math.abs(curr - durationBeats) < Math.abs(prev - durationBeats) ? curr : prev
+        );
 
         notes.push({
             note: noteNum,
@@ -1091,14 +1105,15 @@ class Game {
         if (soloEl)  soloEl.classList.remove('hidden');
         if (multiEl) multiEl.classList.add('hidden');
 
-        // 注入歌曲
+        // 注入歌曲，但先不允许弹奏
+        this.clearPlayInterval();       // 清理旧的计时器，防止残留 timer 干扰
         this.currentSong      = song;
         this.currentNoteIndex = 0;
-        this.isPlaying        = true;
+        this.isPlaying        = false;  // 试听阶段暂不允许输入
         this.isAnswering      = false;
         this.isProcessingNote = false;
 
-        // 显示调号 + 歌名（多人模式显示）
+        // 显示调号 + 歌名
         if (this.keySignatureDisplay) {
             this.keySignatureDisplay.innerHTML =
                 `🎵 ${song.name}` +
@@ -1109,8 +1124,173 @@ class Game {
         this.showScreen('play');
         this.renderSheet();
         this.renderKeyboard();
+
+        // ── 试听预览阶段：显示按钮等待用户点击 ──────────────
+        this._showPreviewButton(song);
+    }
+
+    // 显示"试听旋律"按钮，点击后开始播放（支持暂停/继续）
+    _showPreviewButton(song) {
+        const old = document.getElementById('previewBtn');
+        if (old) old.remove();
+
+        const btn = document.createElement('button');
+        btn.id = 'previewBtn';
+        btn.className = 'preview-btn';
+        btn.innerHTML = '▶ 试听旋律';
+        btn.title = '点击播放/暂停试听，听完后可开始弹奏';
+
+        this.playTips.textContent = '点击下方按钮，先听一遍旋律再开始弹奏';
+        this.playTips.parentNode.insertBefore(btn, this.playTips.nextSibling);
+
+        // 初始化预览状态
+        this._preview = {
+            song,
+            playing: false,
+            noteIndex: 0,      // 当前播放到第几个音符
+            timer: null,       // 当前 setTimeout handle
+            done: false,
+        };
+
+        btn.addEventListener('click', () => {
+            // 确保 AudioContext 激活（必须在用户交互同步链里）
+            const ctx = audioManager.audioContext;
+            const resume = ctx && ctx.state === 'suspended' ? ctx.resume() : Promise.resolve();
+            resume.then(() => this._togglePreview(btn));
+        });
+    }
+
+    _togglePreview(btn) {
+        const pv = this._preview;
+        if (!pv || pv.done) return;
+
+        if (pv.playing) {
+            // 暂停：清除下一个音符的定时器
+            clearTimeout(pv.timer);
+            pv.playing = false;
+            btn.innerHTML = '▶ 继续试听';
+            this.playTips.textContent = '已暂停 — 继续试听，或直接开始弹奏';
+            // 暂停时显示「直接开始弹奏」按钮
+            this._showStartNowButton(btn);
+        } else {
+            // 开始 / 继续：隐藏「直接开始」按钮
+            this._hideStartNowButton();
+            pv.playing = true;
+            btn.innerHTML = '⏸ 暂停';
+            this.playTips.textContent = '🎵 试听旋律中，请记住...';
+            this._scheduleNextPreviewNote(btn);
+        }
+    }
+
+    _showStartNowButton(previewBtn) {
+        if (document.getElementById('startNowBtn')) return;
+        const btn = document.createElement('button');
+        btn.id = 'startNowBtn';
+        btn.className = 'preview-btn preview-btn-start';
+        btn.innerHTML = '🎹 直接开始弹奏';
+        // 插在试听按钮后面
+        previewBtn.parentNode.insertBefore(btn, previewBtn.nextSibling);
+        btn.addEventListener('click', () => {
+            this._cancelPreviewAndStart();
+        }, { once: true });
+    }
+
+    _hideStartNowButton() {
+        const btn = document.getElementById('startNowBtn');
+        if (btn) btn.remove();
+    }
+
+    // 取消试听，直接进入弹奏
+    _cancelPreviewAndStart() {
+        const pv = this._preview;
+        if (pv) {
+            clearTimeout(pv.timer);
+            this._preview = null;
+        }
+        // 移除试听相关按钮
+        const previewBtn = document.getElementById('previewBtn');
+        if (previewBtn) previewBtn.remove();
+        const startNowBtn = document.getElementById('startNowBtn');
+        if (startNowBtn) startNowBtn.remove();
+
+        // 直接进入弹奏状态
+        this.currentNoteIndex = 0;
+        this.isPlaying        = true;
+        this.isAnswering      = false;
+        this.isProcessingNote = false;
+        this.renderSheet();
+        this.highlightNote(0);
+        const firstNote  = this.currentSong.notes[0];
+        const secondNote = this.currentSong.notes[1] || null;
+        this.highlightKey(firstNote.note, firstNote.octave ?? 0,
+            secondNote?.note ?? null, secondNote?.octave ?? null);
+        this.renderPreviewBar(0);
         this.playTips.textContent = '按照简谱弹奏，让朋友来猜！';
         this.playNotes();
+    }
+
+    _scheduleNextPreviewNote(btn) {
+        const pv = this._preview;
+        if (!pv || !pv.playing) return;
+
+        const notes  = pv.song.notes || [];
+        const tempo  = pv.song.tempo || 120;
+        const beatMs = Math.max(60000 / tempo, 150);
+
+        if (pv.noteIndex >= notes.length) {
+            // 所有音符播完，进入倒计时
+            this._runPreviewCountdown(btn);
+            return;
+        }
+
+        const note  = notes[pv.noteIndex];
+        const durS  = Math.max((beatMs * (note.duration || 1)) / 1000, 0.15);
+        const waitMs = beatMs * (note.duration || 1);
+
+        // 立即播放当前音符并高亮
+        this.highlightNote(pv.noteIndex);
+        audioManager.playNoteByMidi(note.midiNote, durS);
+
+        pv.noteIndex++;
+
+        // 安排下一个音符
+        pv.timer = setTimeout(() => this._scheduleNextPreviewNote(btn), waitMs);
+    }
+
+    _runPreviewCountdown(btn) {
+        const pv = this._preview;
+        if (!pv) return;
+        pv.playing = false; // 倒计时期间锁定按钮
+        pv.done = true;
+        btn.disabled = true;
+
+        const counts = ['准备好了吗？', '3', '2', '1', '开始！'];
+        counts.forEach((text, i) => {
+            setTimeout(() => {
+                this.playTips.textContent = text;
+                btn.innerHTML = text;
+            }, i * 700);
+        });
+
+        setTimeout(() => {
+            btn.remove();
+            this._preview = null;
+            this.currentNoteIndex = 0;
+            this.isPlaying        = true;
+            this.isAnswering      = false;
+            this.isProcessingNote = false;
+            this.renderSheet();
+            this.highlightNote(0);
+            // 高亮第一个键
+            const firstNote = this.currentSong.notes[0];
+            const secondNote = this.currentSong.notes[1] || null;
+            this.highlightKey(firstNote.note, firstNote.octave ?? 0,
+                secondNote?.note ?? null, secondNote?.octave ?? null);
+            this.renderPreviewBar(0);
+            this.playTips.textContent = '按照简谱弹奏，让朋友来猜！';
+            // 启动 30s 计时器（多人模式也需要时限）
+            this.playNotes();
+        }, counts.length * 700);
     }
 
     // ─── 多人模式：弹奏结束后回到多人界面 ───────────────────

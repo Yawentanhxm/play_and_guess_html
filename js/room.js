@@ -29,6 +29,10 @@ const ROOM_KEY_MAP = {
   'v':{note:4,octave:-1},'b':{note:5,octave:-1},'n':{note:6,octave:-1},'m':{note:7,octave:-1},
 };
 
+// ─── 默认昵称计数器 ───────────────────────────────────────────
+let _guestCount = 0;
+function defaultName() { return `神秘音乐家${++_guestCount}`; }
+
 // ─── DOM 引用 ─────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 console.log('[room.js] 开始初始化，createBtn=', document.getElementById('createBtn'));
@@ -395,16 +399,14 @@ function _initRoomEvents() {
     console.log('初始化房间事件绑定');
   // 创建房间
   $('createBtn').addEventListener('click', () => {
-    const name = $('nickInput').value.trim();
-    if (!name) { $('entryError').textContent = '请输入昵称'; return; }
+    const name = $('nickInput').value.trim() || defaultName();
     connect(() => send({ type: 'create', name }));
   });
 
   // 加入房间
   $('joinBtn').addEventListener('click', () => {
-    const name = $('nickInput').value.trim();
+    const name = $('nickInput').value.trim() || defaultName();
     const code = $('codeInput').value.trim().toUpperCase();
-    if (!name) { $('entryError').textContent = '请输入昵称'; return; }
     if (code.length !== 4) { $('entryError').textContent = '请输入 4 位房间码'; return; }
     connect(() => send({ type: 'join', name, roomCode: code }));
   });

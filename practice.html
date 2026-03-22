@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>试听 & 练习 — 你弹我猜</title>
+  <style>
+    :root {
+      --bg: #0a051e;
+      --bg2: #0d0826;
+      --purple: #c084fc;
+      --purple-dark: #7b2cbf;
+      --teal: #00f5d4;
+      --text: #e2d9f3;
+      --text-dim: rgba(226,217,243,0.45);
+      --card: rgba(255,255,255,0.04);
+      --border: rgba(192,132,252,0.2);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── 顶栏 ── */
+    .topbar {
+      display: flex; align-items: center; gap: 16px;
+      padding: 14px 24px;
+      background: rgba(0,0,0,0.4);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 20;
+    }
+    .topbar-title { font-size: 18px; font-weight: 700; }
+    .topbar-title span { color: var(--purple); }
+    .btn-home {
+      background: rgba(192,132,252,0.1);
+      border: 1px solid var(--border);
+      color: var(--purple);
+      padding: 7px 16px; border-radius: 10px;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      transition: all .2s;
+      text-decoration: none;
+    }
+    .btn-home:hover { background: rgba(192,132,252,0.2); }
+
+    /* ── 主体布局 ── */
+    .main {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 0;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── 左侧歌单 ── */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-head {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-head h3 { font-size: 14px; color: var(--text-dim); margin-bottom: 10px; }
+    .cat-tabs {
+      display: flex; gap: 6px; flex-wrap: wrap;
+    }
+    .cat-tab {
+      padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700;
+      background: var(--card); border: 1px solid var(--border);
+      cursor: pointer; color: var(--text-dim); transition: all .2s;
+    }
+    .cat-tab.active {
+      background: rgba(192,132,252,0.2);
+      border-color: var(--purple); color: var(--purple);
+    }
+    .search-box {
+      margin-top: 10px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      color: var(--text); font-size: 13px; width: 100%;
+      outline: none;
+    }
+    .search-box:focus { border-color: var(--purple); }
+    .song-list {
+      flex: 1; overflow-y: auto; padding: 8px;
+    }
+    .song-list::-webkit-scrollbar { width: 4px; }
+    .song-list::-webkit-scrollbar-track { background: transparent; }
+    .song-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .song-item {
+      padding: 10px 12px; border-radius: 10px;
+      cursor: pointer; transition: all .15s;
+      border: 1px solid transparent;
+      margin-bottom: 3px;
+    }
+    .song-item:hover { background: var(--card); border-color: var(--border); }
+    .song-item.active {
+      background: rgba(192,132,252,0.12);
+      border-color: var(--purple);
+    }
+    .song-name { font-size: 13px; font-weight: 600; }
+    .song-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+    .song-empty { text-align: center; color: var(--text-dim); padding: 40px 16px; font-size: 13px; }
+
+    /* ── 右侧内容 ── */
+    .content {
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* 空状态 */
+    .empty-state {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: var(--text-dim); gap: 12px;
+    }
+    .empty-state .icon { font-size: 64px; }
+    .empty-state p { font-size: 15px; }
+
+    /* 播放区 */
+    .player-area {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* 歌曲信息 + 控制栏 */
+    .player-header {
+      padding: 16px 24px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .song-info { flex: 1; min-width: 0; }
+    .song-info h2 { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .song-info p { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+    .controls { display: flex; align-items: center; gap: 10px; }
+    .ctrl-btn {
+      width: 42px; height: 42px; border-radius: 50%;
+      background: rgba(192,132,252,0.1);
+      border: 1px solid var(--border);
+      color: var(--text); font-size: 18px;
+      cursor: pointer; transition: all .2s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .ctrl-btn:hover { background: rgba(192,132,252,0.25); border-color: var(--purple); }
+    .ctrl-btn.play-btn {
+      width: 52px; height: 52px; font-size: 22px;
+      background: linear-gradient(135deg, var(--purple-dark), var(--purple));
+      border: none; color: #fff;
+      box-shadow: 0 4px 16px rgba(123,44,191,0.4);
+    }
+    .ctrl-btn.play-btn:hover { transform: scale(1.08); }
+    .tempo-wrap { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
+    .tempo-slider {
+      -webkit-appearance: none; appearance: none;
+      width: 100px; height: 4px;
+      background: var(--border); border-radius: 2px; outline: none; cursor: pointer;
+    }
+    .tempo-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px;
+      border-radius: 50%; background: var(--purple); cursor: pointer;
+    }
+    .progress-bar-wrap {
+      height: 3px; background: rgba(255,255,255,0.08);
+      margin: 0 24px;
+    }
+    .progress-bar {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--purple-dark), var(--purple));
+      transition: width .3s linear;
+    }
+
+    /* 简谱区 */
+    .sheet-wrap {
+      flex: 1; overflow-y: auto; padding: 16px 24px;
+    }
+    .sheet-wrap::-webkit-scrollbar { width: 4px; }
+    .sheet-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .sheet-container {
+      display: flex; flex-wrap: wrap; gap: 4px 2px;
+      align-content: flex-start;
+    }
+    .note-cell {
+      display: flex; flex-direction: column; align-items: center;
+      min-width: 28px; padding: 4px 4px;
+      border-radius: 6px; transition: all .15s; cursor: default;
+      border: 1px solid transparent;
+    }
+    .note-cell.current {
+      background: rgba(192,132,252,0.25);
+      border-color: var(--purple);
+      transform: scale(1.15);
+    }
+    .note-cell.played { opacity: 0.35; }
+    .note-cell .dot-top { font-size: 8px; color: var(--teal); min-height: 10px; }
+    .note-cell .num { font-size: 20px; font-weight: 700; line-height: 1; }
+    .note-cell.current .num { color: var(--purple); }
+    .note-cell .dot-bot { font-size: 8px; color: var(--purple); min-height: 10px; }
+    /* 时值横线 */
+    .note-cell.dur2::after { content: '—'; font-size: 10px; color: var(--text-dim); }
+    .note-cell .underline { height: 2px; background: var(--text-dim); width: 80%; margin-top: 1px; border-radius: 1px; }
+    .bar-line {
+      width: 2px; background: rgba(255,255,255,0.15);
+      border-radius: 1px; align-self: stretch; margin: 2px 4px;
+    }
+    .measure-sep { width: 100%; height: 0; }
+
+    /* ── 键盘区 ── */
+    .keyboard-area {
+      border-top: 1px solid var(--border);
+      padding: 16px 24px;
+      background: rgba(0,0,0,0.2);
+    }
+    .keyboard-label {
+      font-size: 12px; color: var(--text-dim); margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .kbd-rows { display: flex; flex-direction: column; gap: 6px; }
+    .kbd-row { display: flex; align-items: center; gap: 6px; }
+    .kbd-octave-label {
+      font-size: 11px; color: var(--text-dim); width: 36px; text-align: right;
+      flex-shrink: 0;
+    }
+    .key-btn {
+      flex: 1; max-width: 80px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 8px 4px;
+      color: var(--text); cursor: pointer;
+      transition: all .1s; display: flex; flex-direction: column;
+      align-items: center; gap: 2px; user-select: none;
+    }
+    .key-btn:hover { background: rgba(192,132,252,0.1); border-color: var(--purple); }
+    .key-btn.active {
+      background: rgba(192,132,252,0.3); border-color: var(--purple);
+      transform: scale(0.95);
+      box-shadow: 0 0 12px rgba(192,132,252,0.4);
+    }
+    .key-btn .key-letter { font-size: 11px; color: var(--text-dim); }
+    .key-btn .key-num { font-size: 18px; font-weight: 700; }
+
+    /* ── 调试信息栏 ── */
+    .debug-bar {
+      padding: 8px 24px;
+      background: rgba(0,0,0,0.3);
+      border-top: 1px solid var(--border);
+      display: flex; gap: 24px; flex-wrap: wrap;
+      font-size: 11px; color: var(--text-dim); font-family: monospace;
+    }
+    .debug-item span { color: var(--purple); }
+
+    /* ── 加载 ── */
+    .loading-mask {
+      position: fixed; inset: 0;
+      background: rgba(10,5,30,0.85);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 99; backdrop-filter: blur(6px);
+    }
+    .loading-mask.hidden { display: none; }
+    .loading-box { text-align: center; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--purple);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 700px) {
+      .main { grid-template-columns: 1fr; }
+      .sidebar { max-height: 240px; border-right: none; border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- 加载遮罩 -->
+<div class="loading-mask" id="loadingMask">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <p id="loadingText">加载曲库中...</p>
+  </div>
+</div>
+
+<!-- 顶栏 -->
+<div class="topbar">
+  <a class="btn-home" href="/">← 返回首页</a>
+  <div class="topbar-title">🎹 试听 &amp; <span>练习</span></div>
+  <div style="flex:1"></div>
+  <div style="font-size:12px;color:var(--text-dim)" id="libCount">曲库加载中...</div>
+</div>
+
+<!-- 主体 -->
+<div class="main">
+
+  <!-- 左侧歌单 -->
+  <div class="sidebar">
+    <div class="sidebar-head">
+      <h3>歌曲列表</h3>
+      <div class="cat-tabs" id="catTabs">
+        <div class="cat-tab active" data-cat="全部">全部</div>
+      </div>
+      <input class="search-box" id="searchBox" type="text" placeholder="🔍 搜索歌名...">
+    </div>
+    <div class="song-list" id="songList">
+      <div class="song-empty">曲库加载中...</div>
+    </div>
+  </div>
+
+  <!-- 右侧 -->
+  <div class="content" id="contentArea">
+    <!-- 空状态 -->
+    <div class="empty-state" id="emptyState">
+      <div class="icon">🎵</div>
+      <p>从左侧选择一首歌开始</p>
+      <p style="font-size:13px">可以试听自动播放，也可以跟着简谱自己弹奏</p>
+    </div>
+
+    <!-- 播放区（选歌后显示） -->
+    <div class="player-area hidden" id="playerArea">
+
+      <!-- 歌曲信息 + 控制 -->
+      <div class="player-header">
+        <div class="song-info">
+          <h2 id="playerTitle">—</h2>
+          <p id="playerMeta">—</p>
+        </div>
+        <div class="controls">
+          <button class="ctrl-btn" id="btnStop" title="停止">⏹</button>
+          <button class="ctrl-btn play-btn" id="btnPlay" title="播放/暂停">▶</button>
+          <button class="ctrl-btn" id="btnRestart" title="重头播放">↩</button>
+        </div>
+        <div class="tempo-wrap">
+          <span>速度</span>
+          <input class="tempo-slider" id="tempoSlider" type="range" min="30" max="200" value="100">
+          <span id="tempoVal">100%</span>
+        </div>
+      </div>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+
+      <!-- 简谱 -->
+      <div class="sheet-wrap">
+        <div class="sheet-container" id="sheetContainer"></div>
+      </div>
+
+      <!-- 键盘 -->
+      <div class="keyboard-area">
+        <div class="keyboard-label">
+          🎹 点击或按键盘弹奏
+          <span id="practiceMode" style="color:var(--teal);font-weight:700"></span>
+        </div>
+        <div class="kbd-rows" id="kbdRows"></div>
+      </div>
+
+      <!-- 调试信息 -->
+      <div class="debug-bar">
+        <div class="debug-item">调号: <span id="dbgKey">—</span></div>
+        <div class="debug-item">上一个音符: <span id="dbgLast">—</span></div>
+        <div class="debug-item">MIDI值: <span id="dbgMidi">—</span></div>
+        <div class="debug-item">八度: <span id="dbgOctave">—</span></div>
+        <div class="debug-item">总音符数: <span id="dbgTotal">—</span></div>
+        <div class="debug-item">播放进度: <span id="dbgProgress">—</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/tonejs-midi.js"></script>
+<script src="js/tonal.js"></script>
+<script src="js/data.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/game.js?v=18"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+//  试听 & 练习页面逻辑
+// ═══════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+
+// ── 状态 ─────────────────────────────────────────────
+let currentSong  = null;   // 当前选中的歌曲对象
+let playState    = 'stopped'; // 'stopped' | 'playing' | 'paused'
+let playIndex    = 0;      // 当前播放到第几个音符
+let playTimer    = null;   // setTimeout handle
+let tempoScale   = 1.0;    // 速度倍率
+let activeKeys   = new Set(); // 当前按下的键盘键
+
+// ── 加载曲库 ─────────────────────────────────────────
+const fakeGame = {
+  showLoadingOverlay(t) { $('loadingText').textContent = t; },
+  hideLoadingOverlay() { $('loadingMask').classList.add('hidden'); },
+  _songsLoaded: false,
+  _songsPromise: null,
+};
+
+async function loadLibrary() {
+  try {
+    await loadMidiIndex();
+    const total = MIDI_FILES.length;
+    let loaded = 0;
+
+    for (const midiFile of MIDI_FILES) {
+      loaded++;
+      $('loadingText').textContent = `解析中 (${loaded}/${total}): ${midiFile.name}`;
+      try {
+        const midiData = await Midi.fromUrl(`data/${midiFile.file}`);
+        const { notes, keySignature, keyName } = extractNotesFromMidi(midiData);
+        if (notes.length > 0) {
+          SONGS.push({
+            id: Date.now() + Math.random(),
+            name: midiFile.name,
+            category: midiFile.category || midiFile.file.split('/')[0],
+            tempo: midiData.bpm,
+            keySignature, keyName, notes,
+          });
+        }
+      } catch(e) { console.warn('跳过:', midiFile.name, e.message); }
+    }
+
+    $('libCount').textContent = `共 ${SONGS.length} 首`;
+    $('loadingMask').classList.add('hidden');
+    buildSidebar();
+  } catch(e) {
+    $('loadingText').textContent = '加载失败: ' + e.message;
+  }
+}
+
+// ── 侧边栏 ───────────────────────────────────────────
+function buildSidebar() {
+  // 分类 tab
+  const cats = ['全部', ...new Set(SONGS.map(s => s.category))];
+  $('catTabs').innerHTML = cats.map(c =>
+    `<div class="cat-tab${c==='全部'?' active':''}" data-cat="${c}">${c}</div>`
+  ).join('');
+  $('catTabs').querySelectorAll('.cat-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      $('catTabs').querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      renderSongList();
+    });
+  });
+  $('searchBox').addEventListener('input', renderSongList);
+  renderSongList();
+}
+
+function renderSongList() {
+  const cat    = $('catTabs').querySelector('.cat-tab.active')?.dataset.cat || '全部';
+  const query  = $('searchBox').value.trim().toLowerCase();
+  const list   = SONGS.filter(s =>
+    (cat === '全部' || s.category === cat) &&
+    (!query || s.name.toLowerCase().includes(query))
+  );
+
+  if (list.length === 0) {
+    $('songList').innerHTML = '<div class="song-empty">没有匹配的歌曲</div>';
+    return;
+  }
+  $('songList').innerHTML = list.map(s => `
+    <div class="song-item${currentSong?.id===s.id?' active':''}" data-id="${s.id}">
+      <div class="song-name">${s.name}</div>
+      <div class="song-meta">${s.category} · ${s.notes.length} 个音符 · ${Math.round(s.tempo)} BPM</div>
+    </div>
+  `).join('');
+  $('songList').querySelectorAll('.song-item').forEach(el => {
+    el.addEventListener('click', () => selectSong(el.dataset.id));
+  });
+}
+
+// ── 选歌 ─────────────────────────────────────────────
+function selectSong(id) {
+  stopPlayback();
+  currentSong = SONGS.find(s => String(s.id) === String(id));
+  if (!currentSong) return;
+
+  playIndex = 0;
+  $('emptyState').classList.add('hidden');
+  $('playerArea').classList.remove('hidden');
+
+  $('playerTitle').textContent = currentSong.name;
+  $('playerMeta').textContent  =
+    `${currentSong.category} · ${currentSong.notes.length} 音符 · ${Math.round(currentSong.tempo)} BPM` +
+    (currentSong.keyName ? ` · 调号: ${currentSong.keyName}` : '');
+
+  $('tempoSlider').value = 100;
+  $('tempoVal').textContent = '100%';
+  tempoScale = 1.0;
+
+  $('dbgTotal').textContent = currentSong.notes.length;
+  $('dbgKey').textContent   = `${currentSong.keySignature || 'C'} (${currentSong.keyName || ''})`;
+  renderSheet();
+  renderKeyboard();
+  updateProgress();
+  renderSongList(); // 更新选中高亮
+}
+
+// ── 简谱渲染 ─────────────────────────────────────────
+function renderSheet() {
+  const notes = currentSong.notes;
+  const c = $('sheetContainer');
+  c.innerHTML = '';
+  let beatAcc = 0;
+
+  notes.forEach((n, i) => {
+    // 小节分隔（每4拍加竖线）
+    if (beatAcc > 0 && Math.floor(beatAcc) % 4 === 0 && beatAcc === Math.floor(beatAcc)) {
+      const bar = document.createElement('div');
+      bar.className = 'bar-line';
+      c.appendChild(bar);
+    }
+    beatAcc += (n.duration || 1);
+
+    const cell = document.createElement('div');
+    cell.className = 'note-cell' + (i === playIndex ? ' current' : i < playIndex ? ' played' : '');
+    cell.dataset.index = i;
+
+    const dotTop = document.createElement('div');
+    dotTop.className = 'dot-top';
+    dotTop.textContent = n.octave === 1 ? '·' : '';
+
+    const num = document.createElement('div');
+    num.className = 'num';
+    num.textContent = n.note;
+
+    const dotBot = document.createElement('div');
+    dotBot.className = 'dot-bot';
+    dotBot.textContent = n.octave === -1 ? '·' : '';
+
+    cell.appendChild(dotTop);
+    cell.appendChild(num);
+    // 时值 ≤ 0.5 加下划线
+    if (n.duration <= 0.5) {
+      const ul = document.createElement('div'); ul.className = 'underline';
+      cell.appendChild(ul);
+    }
+    cell.appendChild(dotBot);
+
+    c.appendChild(cell);
+  });
+}
+
+function highlightSheet(index) {
+  const cells = $('sheetContainer').querySelectorAll('.note-cell');
+  cells.forEach((c, i) => {
+    c.classList.remove('current', 'played');
+    if (i === index) {
+      c.classList.add('current');
+      // 滚动到视野
+      c.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    } else if (i < index) {
+      c.classList.add('played');
+    }
+  });
+}
+
+// ── 键盘渲染 ─────────────────────────────────────────
+const KBD_LAYOUT = [
+  { octave: 1,  label: '高↑', keys: ['Q','W','E','R','T','Y','U'] },
+  { octave: 0,  label: '中',  keys: ['A','S','D','F','G','H','J'] },
+  { octave: -1, label: '低↓', keys: ['Z','X','C','V','B','N','M'] },
+];
+
+function renderKeyboard() {
+  const rows = $('kbdRows');
+  rows.innerHTML = '';
+  KBD_LAYOUT.forEach(row => {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'kbd-row';
+    const lbl = document.createElement('div');
+    lbl.className = 'kbd-octave-label';
+    lbl.textContent = row.label;
+    rowEl.appendChild(lbl);
+    row.keys.forEach((k, ni) => {
+      const btn = document.createElement('button');
+      btn.className = 'key-btn';
+      btn.dataset.note   = ni + 1;
+      btn.dataset.octave = row.octave;
+      btn.dataset.key    = k;
+      btn.innerHTML = `<span class="key-letter">${k}</span><span class="key-num">${ni+1}</span>`;
+      btn.addEventListener('mousedown', e => { e.preventDefault(); triggerNote(ni+1, row.octave, btn); });
+      btn.addEventListener('touchstart', e => { e.preventDefault(); triggerNote(ni+1, row.octave, btn); }, { passive: false });
+      rowEl.appendChild(btn);
+    });
+    rows.appendChild(rowEl);
+  });
+}
+
+// ── 弹奏触发（点击 / 键盘） ──────────────────────────
+// 根据当前歌曲的调号把简谱数字+八度转成 MIDI 值
+// 复用 game.js 里的 noteToMidi(note, octave, keySignature)
+function practiceNoteToMidi(note, octave) {
+  const ks = currentSong?.keySignature || 'C';
+  // game.js 里已经定义了 noteToMidi(note, octave, keySignature)
+  if (typeof noteToMidi === 'function') {
+    return noteToMidi(note, octave, ks);
+  }
+  // 回退：C 调
+  const offsets = [0, 0, 2, 4, 5, 7, 9, 11];
+  return 60 + offsets[note] + octave * 12;
+}
+
+function triggerNote(note, octave, btnEl) {
+  const midi = practiceNoteToMidi(note, octave);
+  if (btnEl) btnEl.classList.add('active');
+
+  // 确保 AudioContext 激活
+  const ctx = audioManager.audioContext;
+  const play = () => {
+    audioManager.playNoteByMidi(midi, 0.5);
+    updateDebug(note, midi, octave);
+  };
+  ctx && ctx.state === 'suspended' ? ctx.resume().then(play) : play();
+
+  setTimeout(() => { if (btnEl) btnEl.classList.remove('active'); }, 200);
+}
+
+function updateDebug(note, midi, octave) {
+  $('dbgLast').textContent    = note;
+  $('dbgMidi').textContent    = midi;
+  $('dbgOctave').textContent  = octave === 1 ? '高(+1)' : octave === -1 ? '低(-1)' : '中(0)';
+}
+
+// ── 键盘事件 ─────────────────────────────────────────
+const KEY_TO_NOTE = {
+  'q':{note:1,octave:1},'w':{note:2,octave:1},'e':{note:3,octave:1},
+  'r':{note:4,octave:1},'t':{note:5,octave:1},'y':{note:6,octave:1},'u':{note:7,octave:1},
+  'a':{note:1,octave:0},'s':{note:2,octave:0},'d':{note:3,octave:0},
+  'f':{note:4,octave:0},'g':{note:5,octave:0},'h':{note:6,octave:0},'j':{note:7,octave:0},
+  'z':{note:1,octave:-1},'x':{note:2,octave:-1},'c':{note:3,octave:-1},
+  'v':{note:4,octave:-1},'b':{note:5,octave:-1},'n':{note:6,octave:-1},'m':{note:7,octave:-1},
+};
+
+document.addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const k = e.key.toLowerCase();
+  if (!(k in KEY_TO_NOTE)) return;
+  const { note, octave } = KEY_TO_NOTE[k];
+  const btn = $('kbdRows').querySelector(`[data-key="${k.toUpperCase()}"]`);
+  triggerNote(note, octave, btn);
+});
+
+// ── 播放控制 ─────────────────────────────────────────
+function startPlayback() {
+  if (!currentSong) return;
+  playState = 'playing';
+  $('btnPlay').textContent = '⏸';
+  scheduleNext();
+}
+
+function pausePlayback() {
+  clearTimeout(playTimer);
+  playState = 'paused';
+  $('btnPlay').textContent = '▶';
+}
+
+function stopPlayback() {
+  clearTimeout(playTimer);
+  playState = 'stopped';
+  playIndex = 0;
+  $('btnPlay').textContent = '▶';
+  if (currentSong) { renderSheet(); updateProgress(); }
+}
+
+function scheduleNext() {
+  if (playState !== 'playing' || !currentSong) return;
+  if (playIndex >= currentSong.notes.length) {
+    // 播完
+    playState = 'stopped';
+    $('btnPlay').textContent = '▶';
+    playIndex = 0;
+    renderSheet(); updateProgress();
+    return;
+  }
+
+  const note   = currentSong.notes[playIndex];
+  const tempo  = (currentSong.tempo || 120) * tempoScale;
+  const beatMs = Math.max(60000 / tempo, 80);
+  const durMs  = beatMs * (note.duration || 1);
+  const durS   = durMs / 1000;
+
+  // 确保 AudioContext 激活（首次播放）
+  const ctx = audioManager.audioContext;
+  const doPlay = () => {
+    audioManager.playNoteByMidi(note.midiNote, Math.min(durS * 0.85, 2.0));
+    highlightSheet(playIndex);
+    updateDebug(note.note, note.midiNote, note.octave ?? 0);
+    $('dbgProgress').textContent = `${playIndex + 1} / ${currentSong.notes.length}`;
+    updateProgress();
+    playIndex++;
+    playTimer = setTimeout(scheduleNext, durMs);
+  };
+
+  ctx && ctx.state === 'suspended' ? ctx.resume().then(doPlay) : doPlay();
+}
+
+function updateProgress() {
+  if (!currentSong) return;
+  const pct = currentSong.notes.length > 0
+    ? (playIndex / currentSong.notes.length) * 100 : 0;
+  $('progressBar').style.width = pct + '%';
+  $('dbgProgress').textContent = `${playIndex} / ${currentSong.notes.length}`;
+}
+
+// ── 按钮事件 ─────────────────────────────────────────
+$('btnPlay').addEventListener('click', () => {
+  if (playState === 'playing') pausePlayback();
+  else startPlayback();
+});
+$('btnStop').addEventListener('click', stopPlayback);
+$('btnRestart').addEventListener('click', () => {
+  stopPlayback();
+  setTimeout(startPlayback, 100);
+});
+$('tempoSlider').addEventListener('input', function() {
+  tempoScale = this.value / 100;
+  $('tempoVal').textContent = this.value + '%';
+});
+
+// ── 启动 ─────────────────────────────────────────────
+loadLibrary();
+</script>
+</body>
+</html>
